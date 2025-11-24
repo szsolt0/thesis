@@ -5,17 +5,15 @@ written thesis and supporting codes.
 
 - **Title:** Alkalmazásfejlesztői szintű erőforrás-izoláció a Linux kernelben:
   Landlock és seccomp szerepe és alkalmazása
-- **Description:** Az operációs rendszerek biztonsága kiemelt jelentőségű. A
-  dolgozat azt vizsgálja meg, hogy a Landlock, az eBPF és az azokhoz hasonló
-  megoldások hogyan segítik a rendszerek biztonságosabbá tételét. A dolgozatban
-  szó esik a SELinux és az AppArmor szerepéről. Konkrét alkalmazások, és létező
-  sebezhetőségek vizsgálata kapcsán bemutatásra kerül ezek működése,
-  retrospektív jelleggel, hogy az újonnan bevezetett módszerek milyen régebbi
-  sebezhetőségeket lettek volna képesek megakadályozni. A dolgozat bemutatja
-  továbbá egy saját függvénykönyvtár készítését, amely API-jának kialakításánál
-  kiemelt szempont, hogy egyszerűbbé, kényelmesebbé tegye a biztonságos
-  szoftverek fejlesztését.
-- **Supervisor:** Nehéz Károly
+- **Description:** The security of operating systems is of critical importance.
+  This thesis examines how Landlock, BPF, and similar mechanisms contribute to
+  making systems more secure. It also discusses the roles of SELinux and AppArmor.
+  Through the study of specific applications and known vulnerabilities, the thesis
+  demonstrates how these mechanisms work and, retrospectively, which past
+  vulnerabilities could have been mitigated by their use. Additionally, the thesis
+  presents the development of a custom library, designed with an API that
+  prioritizes ease of use and convenience for secure software development.
+- **Supervisor:** Károly Nehéz
 
 # Thesis Scope
 
@@ -30,33 +28,13 @@ The thesis explores:
 
 ## Repository Overview
 
-This repository contains both the **thesis** and the **code** supporting it:
+This repository contains both the thesis and the supporting code:
 
-- `thesis/` contains the LaTeX source files for the written thesis.
-- `code/` contains the actual code.
-
-Currently, there's only a minimal Landlock example in `code/examples/`. It can
-be run with:
-
-```sh
-cd code/examples/
-g++ -std='c++20' -Wall -Wextra -O2 landlock.cpp
-./a.out
-```
-
-It should output something like this:
-
-```
-Trying to open a.txt (should succeed)…
-Success!
-Trying to open b.txt (should fail)…
-failed to open b.txt: Permission denied
-```
-
-Additionally, we can see in the `strace` output that the syscalls worked:
-
-```strace
-landlock_create_ruleset({handled_access_fs=LANDLOCK_ACCESS_FS_EXECUTE|LANDLOCK_ACCESS_FS_READ_FILE, handled_access_net=0, scoped=0}, 24, 0) = 3
-landlock_add_rule(3, LANDLOCK_RULE_PATH_BENEATH, {allowed_access=LANDLOCK_ACCESS_FS_EXECUTE|LANDLOCK_ACCESS_FS_READ_FILE, parent_fd=4}, 0) = 0
-landlock_restrict_self(3, 0)            = 0
-```
+- `thesis/` – LaTeX source files for the written thesis.
+- `docs/` – Documentation related to the library and thesis.
+- `code/` – All related code.
+    - `examples/` – Various example programs.
+    - `library/` – Implementation of the custom library.
+        - `cpp/` – C++ version.
+        - `rs/` – Rust version.
+        - `common/` – Shared files used by both versions (e.g., list of syscall categories).
