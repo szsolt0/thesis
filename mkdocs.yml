@@ -1,0 +1,42 @@
+site_name: Thesis
+repo_url: https://github.com/szsolt0/thesis
+
+plugins:
+  - search
+  - literate-nav
+
+theme:
+  name: material
+  features:
+    - navigation.tabs
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: amber
+      accent: amber
+      toggle:
+        icon: material/weather-night
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: amber
+      accent: amber
+      toggle:
+        icon: material/weather-sunny
+
+markdown_extensions:
+  - smarty
+  - toc:
+      toc_depth: 3
+      permalink: true
+  - admonition
+  - pymdownx.details
+  - pymdownx.extra
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.highlight
+  - pymdownx.inlinehilite
+  - pymdownx.arithmatex:
+      generic: true
