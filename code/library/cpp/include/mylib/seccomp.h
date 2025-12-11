@@ -5,6 +5,7 @@
 #include <expected>
 #include <string_view>
 #include <span>
+#include <vector>
 
 #include <linux/seccomp.h>
 #include <linux/filter.h>
@@ -50,7 +51,12 @@ class SeccompRuleView
 
 class SeccompRule
 {
+	friend class SeccompBuilder;
+
 	SeccompRuleView m_view;
+
+	__attribute__((always_inline))
+	SeccompRule(SeccompRuleView view) noexcept : m_view{view} {}
 
 	__attribute__((always_inline))
 	void set_moved_from() noexcept
@@ -104,20 +110,25 @@ class SeccompRule
 
 class SeccompBuilder
 {
-	detail::OwnedFd m_fd;
+	std::vector<sock_filter> m_filter;
+	bool finished = false;
 
-	__attribute__((always_inline))
-	SeccompBuilder(int const fd) noexcept : m_fd{fd} {}
+	/*__attribute__((always_inline))
+	SeccompBuilder(int const fd) noexcept : m_fd{fd} {}*/
+
+	std::expected<void, int> add_preample();
+	std::expected<void, int> append(sock_fprog const* prog);
 
 	public:
 
 	static std::expected<SeccompBuilder, int> init() noexcept;
+	static std::expected<SeccompBuilder, int> init_no_defaults() noexcept;
 
 	std::expected<void, int> allow(std::string_view what) noexcept;
 
-	std::expected<SeccompRule, int> build() noexcept;
+	std::expected<SeccompRule, int> build(bool kill_entire_process = true) noexcept;
 
-	std::expected<SeccompRuleView, int> build_static() noexcept;
+	std::expected<SeccompRuleView, int> build_static(bool kill_entire_process = true) noexcept;
 };
 
 /*std::expected<SeccompRule, int> seccomp_create_rules_v(std::span<std::string_view> const rules) noexcept
