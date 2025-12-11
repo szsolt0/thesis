@@ -115,3 +115,11 @@ iovec make_iovec(std::string_view const str) noexcept
 }
 
 } // namespace mylib::detail
+
+/// Returns true if x is in range [a, b]
+template <typename T, typename A, typename B>
+static inline __attribute__((always_inline))
+bool is_between(T const& x, A const& a, B const& b) noexcept
+{
+	return a <= x && x <= b;
+}

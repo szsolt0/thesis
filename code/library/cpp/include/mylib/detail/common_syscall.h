@@ -148,4 +148,20 @@ int sys_seccomp(unsigned int const operation, unsigned int const flags, void *co
 }
 
 
+
+static inline __attribute__((always_inline))
+int sys_memfd_create(char const *name, unsigned int flags)
+{
+	return raw_syscall2<int>(__NR_memfd_create, name, flags);
+}
+
+
+
+static inline __attribute__((always_inline))
+int sys_mprotect(void* addr, size_t size, int prot) noexcept
+{
+	return raw_syscall3<int>(__NR_mprotect, addr, size, prot);
+}
+
+
 } // namespace mylib::detail
