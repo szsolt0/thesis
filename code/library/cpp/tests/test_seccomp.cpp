@@ -32,3 +32,18 @@ TEST(SeccompBetterStrict, Die) {
 		detail::sys_mmap(nullptr, 1024, PROT_NONE, MAP_PRIVATE|MAP_ANONYMOUS, -1, 0);
 	}, "");
 }
+
+TEST(SeccompBuilder, Build) {
+	auto builder = SeccompBuilder::init();
+	EXPECT_TRUE(builder) << "init builder failed: " << builder.error();
+
+	// adding new rules should work
+	EXPECT_TRUE(builder->allow("io")) << "allow rule failed";
+
+	// adding non-existing rules should NOT work
+	EXPECT_FALSE(builder->allow("jdijdsiojiodsj")) << "bad allow rule succeed";
+
+	// building the rule should work
+	auto rule = builder->build();
+	EXPECT_TRUE(rule) << "building failed";
+}
