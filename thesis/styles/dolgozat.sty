@@ -1,0 +1,85 @@
+%A szükséges csomagok
+
+%magyar nyelv
+\usepackage[magyar]{babel}
+\usepackage[T1]{fontenc} 
+%ekvivalens: \usepackage{t1enc}
+\usepackage[utf8]{inputenc}
+\frenchspacing
+
+%méretek: margó, lap, fej~ és lábléc stb. NE MÓDOSÍTSUK!
+\usepackage[a4paper,headheight=15.2pt,headsep=7.1mm,%
+margin=25mm,bindingoffset=5mm]{geometry}
+
+%A túlcsordulási hibák jelzése a nyomtatási képben vastag, telített téglalappal
+\overfullrule=10pt
+
+%fejléc és lábléc
+\usepackage{fancyhdr}
+\fancyhf{}
+\fancyfoot[R]{\thepage}
+\fancyhead[C]{\slshape\nouppercase\rightmark}
+\fancypagestyle{plain}{\fancyhf{}\fancyfoot[R]{\thepage}\renewcommand{\headrulewidth}{0pt}}
+
+%matematika
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{mathtools}
+%\usepackage{mathrsfs} %\mathcal parancshoz
+
+%saját tételszerû környezetek
+\usepackage{amsthm}
+
+\theoremstyle{plain}
+\newtheorem{theorem}{tétel}[chapter]
+\newtheorem{lemma}[theorem]{lemma}
+\newtheorem{corollary}[theorem]{következmény}
+
+\theoremstyle{definition}
+\newtheorem{definition}[theorem]{definíció}\newtheorem{remark}[theorem]{megjegyzés}
+\newtheorem{example}[theorem]{példa}
+
+%táblázatok
+\usepackage{array,multirow}
+\renewcommand{\arraystretch}{1.3}  %default: 1 Sorok közötti távolság nagyítása
+\setlength{\arrayrulewidth}{0.6pt} %default: 0.6pt A vonalak vastagsága
+
+%színek
+\usepackage[table]{xcolor}
+
+%ábrák
+\usepackage{graphicx}
+%\usepackage{tikz}
+%szükség esetén TikZ könytárak:
+%\usetikzlibrary{}
+
+%úszó objektumok
+\usepackage{float}
+%ábrák felirata alul
+\floatstyle{plain}
+\restylefloat{figure}
+%táblázat felirata felül
+\floatstyle{plaintop}
+\restylefloat{table}
+
+%pszeudokód írásához
+%\usepackage{algpseudocode}
+%\usepackage{algorithm}
+%\floatname{algorithm}{Algoritmus}
+%\renewcommand{\listalgorithname}{Algoritmusok listája}
+
+%listák testreszabása
+%\usepackage{enumitem}
+
+%vezérlési szerkezetek
+\usepackage{ifthen}
+%\usepackage{pgffor} %\foreach parancshoz
+
+%biblatex
+% biber-ös fordítás esetén írjuk át a backend-et
+\usepackage[style=numeric,%
+backend=bibtex,sorting=nyt]{biblatex}
+\addbibresource{dolgozat.bib}
+\usepackage{csquotes}
+
+%irodalomjegyzék bevétele a tartalomjegyzékbe, biblatex nélkül:
+%\usepackage[nottoc]{tocbibind}

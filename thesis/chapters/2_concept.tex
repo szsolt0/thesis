@@ -1,0 +1,235 @@
+\chapter{Koncepció}
+
+Ebben a fejezetben kerül bemutatásra a dolgozat témájának tágabb kontextusa:
+milyen problémát próbálnak megoldani az operációs rendszer szintű sandboxolási
+mechanizmusok, milyen megközelítések születtek eddig más rendszerekben, és
+milyen technológiák állnak jelenleg rendelkezésre Linuxon. A fejezet még nem a
+saját implementáció részleteivel foglalkozik, hanem egyfajta irodalmi és
+technológiai háttérként szolgál a későbbi, tervezéssel és megvalósítással
+foglalkozó részekhez.
+
+
+\section{A fejezet célja}
+
+A fejezet célja, hogy az olvasó számára áttekinthetően bemutassa:
+
+\begin{itemize}
+  \item miért problémás a hagyományos, „mindent vagy semmit” típusú
+        jogosultságkezelés az alkalmazások szempontjából,
+  \item milyen, más operációs rendszerekben megjelenő megoldások (pl.\ OpenBSD
+        \texttt{pledge} és \texttt{unveil}) szolgálnak koncepcionális
+        előképként,
+  \item milyen konkrét technológiák érhetők el Linuxon (seccomp, SELinux,
+        AppArmor, Landlock, BPF-alapú szűrők),
+  \item milyen hiányosságok, kényelmetlenségek indokolják egy, modern C++-ra
+        épülő, egységes könyvtár megalkotását.
+\end{itemize}
+
+A fejezet tehát irodalom- és technológiaközpontú: áttekinti a kapcsolódó
+megoldásokat, azok erősségeit és korlátait, valamint megfogalmazza azokat a
+követelményeket, amelyek a dolgozatban bemutatott könyvtár tervezését
+meghatározzák.
+
+
+\section{Operációs rendszerek biztonsági modellje és a jogosultságcsökkentés}
+
+A klasszikus, többfelhasználós operációs rendszerek (Unix, Linux) alapvető
+biztonsági modellje viszonylag egyszerű: a felhasználókhoz és csoportokhoz
+jogosultságok tartoznak, a folyamatok pedig döntően az őket indító felhasználó
+jogaival futnak. A gyakorlatban ez azt jelenti, hogy egy tipikus felhasználói
+alkalmazás az adott user összes fájljához, hálózati erőforrásához, grafikus
+környezetéhez hozzáfér, függetlenül attól, hogy az adott program valójában mire
+„szorulna rá”.
+
+Biztonsági szempontból ez több problémát is felvet:
+
+\begin{itemize}
+  \item egy kompromittált alkalmazás (például egy böngésző vagy PDF-olvasó
+        sérülékenysége miatt) a felhasználó szinte minden adatához hozzáférhet,
+  \item egy folyamat tipikusan sokkal több rendszerhívást használhat, mint ami
+        a feladatához ténylegesen szükséges,
+  \item a \emph{legkisebb jogosultság elve} (principle of least privilege)
+        nehezen érvényesül, mert hiányzik a finomhangolt, folyamat-szintű
+        jogosultságcsökkentés kényelmes eszköztára.
+\end{itemize}
+
+Erre a problémakörre válaszként jelentek meg különböző \emph{sandboxolási}
+megoldások, amelyek célja, hogy a folyamatot egy szűkebb, jól definiált
+„homokozóba” zárják: csak bizonyos rendszerhívásokat engednek, csak adott
+útvonalakra adnak hozzáférést, illetve a hálózati vagy más erőforrások
+elérését erősen korlátozzák.
+
+
+\section{Sandboxolási megközelítések más rendszerekben}
+
+\subsection{Klasszikus Unix mechanizmusok}
+
+A Unix világban régóta léteznek olyan primitívek, mint a \texttt{chroot} vagy
+a különböző jail- és konténer-megoldások. Ezek alapvetően egy \emph{fájlrendszer
+és névterek szintjén} korlátozott környezetet hoznak létre a folyamat számára.
+A modern konténertechnológiák (Docker, LXC stb.) ezekre a mechanizmusokra és
+további kernel-funkciókra (namespace-ek, cgroupok) építenek.
+
+Ezek a megoldások ugyan hatékonyak lehetnek izoláció szempontjából, de
+fejlesztői szemmel nézve gyakran nehezen kezelhetők, rendszerszintű
+konfigurációt igényelnek, és nem feltétlenül alkalmasak arra, hogy egyetlen
+alkalmazás kódjából, futásidőben, néhány függvényhívással kényelmesen
+használhatók legyenek.
+
+
+\subsection{OpenBSD \texttt{pledge} és \texttt{unveil}}
+
+Az OpenBSD egyik fontos újítása a \texttt{pledge} és \texttt{unveil}
+mechanizmus bevezetése volt. A \texttt{pledge} lényege, hogy a folyamat
+deklaratív módon kijelenti, milyen „képességekre” (syscall-kategóriákra) van
+szüksége: például fájlkezelés, hálózat, szkriptek futtatása stb. A kernel ez
+után figyeli a rendszerhívásokat, és ha a folyamat olyasmit próbál tenni, amit
+nem pledge-elt, a kernel azonnal leállítja.
+
+Az \texttt{unveil} ezzel párhuzamosan a fájlrendszer eléréséhez kínál egy
+egyszerű, deklaratív modellt: az alkalmazás megadhatja, mely útvonalakat
+érheti el és milyen módon (olvasás, írás, futtatás). A korábban látott,
+„mindenre rálátó” fájlrendszer-kép helyett a folyamat gyakorlatilag egy
+szűkített nézetet kap.
+
+Ezek a megoldások fontos koncepcionális példát jelentenek: a biztonsági
+mechanizmusok \emph{fejlesztő-barát}, jól érthető API-n keresztül válnak
+használhatóvá, és a rendszerhívás- illetve fájlrendszer-szintű korlátozás
+világosan elkülönül egymástól. A dolgozatban bemutatott C++ könyvtár — bár
+más platformon és más technológiákra épít — ezen koncepció szellemiségét
+követi: a \texttt{seccomp} rész nagy vonalakban a \texttt{pledge}, a
+\texttt{Landlock} rész pedig az \texttt{unveil} szerepét tölti be.
+
+
+\section{Linux-specifikus biztonsági mechanizmusok}
+
+\subsection{Linux Security Module (LSM) keretrendszer}
+
+A Linux kernel a \emph{Linux Security Module} (LSM) keretrendszerrel teszi
+lehetővé különböző biztonsági modellek és modulok plug-in jellegű
+integrációját. Ennek legismertebb példái a SELinux, az AppArmor, a Smack és a
+legújabb generációs Landlock LSM.
+
+Az LSM-modulok közös jellemzője, hogy mélyen integrálódnak a kernel
+működésébe, és különböző hookokon keresztül ellenőrzik az olyan műveleteket,
+mint a fájlmegnyitás, hálózati kapcsolat létrehozása, folyamatok létrehozása
+stb. A SELinux például összetett címkézési és szabályrendszert használ,
+AppArmor pedig útvonal-alapú profilokat vezet be.
+
+Ezek erőteljes eszközök, de konfigurációjuk sokszor bonyolult, disztribúció-
+specifikus, és a mindennapi alkalmazásfejlesztés szintjéről nehezebben
+hozhatók „kézközelbe”.
+
+
+\subsection{Seccomp és BPF-alapú szűrés}
+
+A \texttt{seccomp} mechanizmus lehetővé teszi, hogy egy folyamat a futása
+során „lezárja” magát, és csak egy szűkített rendszerhívás-halmazt használhasson.
+A modern \texttt{seccomp-bpf} változatban a kernel egy BPF programot futtat
+minden rendszerhívás előtt, amely eldönti, hogy az adott hívás engedélyezett,
+logolandó vagy tiltandó.
+
+A seccomp nagy előnye, hogy viszonylag független más LSM moduloktól, jól
+illeszthető a konténer-technológiákhoz, és képes nagyon finom szemcsézettségű
+szabályokat érvényesíteni. Hátránya ugyanakkor, hogy a BPF programok kézi
+összeállítása technikailag összetett, és a fejlesztők tipikusan nem szívesen
+írnak ilyen szűrőket közvetlenül.
+
+A dolgozatban bemutatott könyvtár \emph{seccomp} modulja éppen ezt az
+összetettséget igyekszik elrejteni: egy magasabb szintű, C++-os, builder-alapú
+API-n keresztül teszi lehetővé a rendszerhívás-szabályok deklaratív
+megadását.
+
+
+\subsection{Landlock LSM}
+
+A Landlock egy viszonylag új, unprivilegizált folyamatok számára is
+használható LSM-modul, amely elsősorban a \emph{fájlrendszer-hozzáférés}
+korlátozására koncentrál. A folyamat egy úgynevezett \emph{ruleset}-et hoz
+létre, amelyben megadja, hogy mely útvonalakra milyen hozzáférési jogokkal
+rendelkezhet (olvasás, írás, futtatás, truncálás stb.), majd ezt a rulesetet
+„saját magára zárja”.
+
+A Landlock fontos sajátossága, hogy nem igényel root jogosultságot a
+\emph{korlátozások} beállításához: a folyamat a saját jogain belül szabadon
+dönthet úgy, hogy ezentúl kevesebbet fog látni a fájlrendszerből. Ez jól illeszkedik
+a „legkisebb jogosultság” elvéhez.
+
+A nyers Landlock API azonban meglehetősen alacsony szintű: a fejlesztőnek
+\texttt{landlock\_ruleset\_attr}, \texttt{landlock\_path\_beneath\_attr}
+struktúrákkal, fájlleírókkal és rendszerhívás-wrapper függvényekkel kell
+dolgoznia. A dolgozat C++ könyvtára ezt a komplexitást csomagolja be olyan
+absztrakciók mögé, mint a \texttt{LandlockAccess} enum class vagy a
+\texttt{LandlockRuleSet} RAII-típus.
+
+
+\section{Kapcsolódó eszközök és könyvtárak}
+
+A Linux ökoszisztémában több olyan eszköz és könyvtár létezik, amely valamilyen
+formában sandboxolást valósít meg:
+
+\begin{itemize}
+  \item \textbf{libseccomp}: C nyelvű könyvtár, amely megkönnyíti a
+        seccomp-szűrők létrehozását, de továbbra is viszonylag alacsony szintű
+        API-t kínál, és nem integrálódik szorosan a modern C++ erőforrás- és
+        hibakezelési modelljébe.
+  \item \textbf{Firejail, Bubblewrap, Flatpak stb.}: felhasználói szintű
+        eszközök és környezetek, amelyek konténerek vagy izolált környezetek
+        létrehozását támogatják. Ezek tipikusan önálló programok, nem pedig
+        könnyen linkelhető C++ könyvtárak.
+  \item \textbf{Disztribúció-specifikus profilrendszerek}: SELinux- vagy
+        AppArmor-profilok, amelyek rendszeradminisztrátori nézőpontból hatékony
+        eszközök, de a napi C++ alkalmazásfejlesztés szintjén nehezen
+        használhatók közvetlenül.
+\end{itemize}
+
+A fenti eszközökből látszik, hogy bár a technikai háttér létezik, hiányzik egy
+olyan, modern C++-ra szabott, \emph{könnyen beépíthető} könyvtár, amely egységes
+modellt kínál a rendszerhívás- és fájlrendszer-szintű sandboxolásra, és közvetlenül
+az alkalmazáskódból, néhány függvényhívással használható. A dolgozatban
+bemutatott könyvtár ezt a rést igyekszik betölteni.
+
+
+\section{Követelmények és kutatási kérdések}
+
+Az eddig bemutatott megoldások és technológiák alapján megfogalmazhatók azok a
+fő követelmények, amelyek a tervezendő könyvtár koncepcióját meghatározzák:
+
+\begin{itemize}
+  \item \textbf{Fejlesztő-barát API}: hasonlóan az OpenBSD \texttt{pledge} /
+        \texttt{unveil} pároshoz, a könyvtárnak néhány jól érthető, magas
+        szintű primitivet kell kínálnia, amelyek mögött a bonyolult kernel-
+        mechanizmusok elrejthetők.
+  \item \textbf{Moduláris felépítés}: a rendszerhívás-szintű (\texttt{seccomp})
+        és a fájlrendszer-szintű (\texttt{Landlock}) korlátozást logikailag
+        külön, de összehangolható módon kell kezelni.
+  \item \textbf{Modern C++ gyakorlatok}: RAII, \texttt{std::expected}-alapú
+        hibakezelés, erős típusosság, kivételmentes működés, átlátható
+        erőforrás-életciklusok.
+  \item \textbf{Biztonságos alapértelmezések}: ésszerű default konfigurációk
+        (pl.\ alapértelmezett Landlock-útvonalak) biztosítása, hogy egy minimális
+        beállítással is értelmes védelmi szint érhető legyen el.
+  \item \textbf{Kombinálhatóság}: a seccomp és Landlock mechanizmusok olyan
+        módon való használata, hogy egymást erősítve, többrétegű védelmet
+        jelentsenek egy támadóval szemben.
+\end{itemize}
+
+E követelményekhez kapcsolódóan a dolgozat több gyakorlati kutatási kérdésre is
+igyekszik választ adni, például:
+
+\begin{itemize}
+  \item Milyen, az OpenBSD \texttt{pledge} / \texttt{unveil} megoldásához
+        hasonló absztrakciók ültethetők át ésszerűen Linux seccomp- és
+        Landlock-alapokra?
+  \item Milyen mértékben lehetséges a tipikus Linux-alkalmazások jogosultsági
+        igényeit előre definiált, könnyen használható „profilokba” tömöríteni?
+  \item Mennyire kényelmesen és biztonságosan illeszthető a seccomp és Landlock
+        kombinációja modern C++ kódbázisokba, különös tekintettel a hibakezelésre
+        és az erőforrás-kezelésre?
+\end{itemize}
+
+A következő fejezetekben a dolgozat ezekre a kérdésekre keresi a választ: először
+a tervezés (architektúra, API-döntések, osztálystruktúra) kerül bemutatásra,
+majd az implementáció és a gyakorlati példák segítségével láthatóvá válik, hogy
+a bemutatott koncepció milyen mértékben képes megfelelni az itt megfogalmazott
+követelményeknek.

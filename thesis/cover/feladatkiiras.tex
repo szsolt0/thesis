@@ -1,0 +1,174 @@
+%Feladatkiiras
+\noindent
+\textsc{\textbf{Miskolci Egyetem}}\\
+Gépészmérnöki és Informatikai Kar\\
+Alkalmazott Matematikai Intézeti Tanszék\hspace*{4cm}\hfil \textbf{Szám:}
+
+\vspace{0.5cm}
+\begin{center}
+\large\textsc{\textbf{Szakdolgozat Feladat}}
+\end{center}
+\vspace{0.5cm}
+
+Sebe Zsolt (ACC02G) programtervező informatikus jelölt részére.
+
+\bigskip
+\noindent\textbf{A szakdolgozat tárgyköre:} Linux, Security, C++, Sandboxing, Linux Kernel, Seccomp, System Calls, Systems Programming, Seccomp Filter, Seccomp BPF, Resource Isolation, Landlock
+
+\bigskip
+\noindent\textbf{A szakdolgozat címe:} Alkalmazásfejlesztői szintű erőforrás-izoláció a Linux kernelben: Landlock és seccomp szerepe és alkalmazása
+
+\bigskip
+\noindent\textbf{A feladat részletezése:}
+
+\medskip
+
+\emph{Ide kell a feladatkiírásban szereplő szöveget betenni.}
+
+\medskip
+
+\emph{(Kisebb tagolás lehet benne, hogy jól nézzen ki.)}
+
+\vfill
+
+\noindent\textbf{Témavezető:} Nehéz Károly (beosztása)
+
+% \noindent\textbf{Konzulens(ek):} (akkor kötelezõ, ha a témavezetõ nem valamelyik matematikai tanszékrõl való; de persze lehet egyébként is)\newline
+
+\bigskip
+\noindent\textbf{A feladat kiadásának ideje:}
+
+%\noindent\textbf{A feladat beadásának határideje:}
+
+\vspace{1.5cm}
+
+\hfill\makebox[6cm]{\dotfill}
+
+\hfill\makebox[6cm]{szakfelelős}
+
+\clearpage
+
+\vspace*{1cm}
+\begin{center}
+\large\textsc{\textbf{Eredetiségi Nyilatkozat}}
+\end{center}
+\vspace*{2cm}
+
+Alulírott \textbf{Sebe Zsolt}; Neptun-kód: \texttt{ACC02G} a Miskolci Egyetem Gépészmérnöki és Informatikai Karának végzős Programtervező informatikus szakos hallgatója ezennel büntetőjogi és fegyelmi felelősségem tudatában nyilatkozom és aláírásommal igazolom, hogy \textit{Alkalmazásfejlesztői szintű erőforrás-izoláció a Linux kernelben: Landlock és seccomp szerepe és alkalmazása}
+című szakdolgozatom saját, önálló munkám; az abban hivatkozott szakirodalom
+felhasználása a forráskezelés szabályai szerint történt.
+
+\medskip
+Tudomásul veszem, hogy szakdolgozat esetén plágiumnak számít:
+\begin{itemize}
+\item szószerinti idézet közlése idézőjel és hivatkozás megjelölése nélkül;
+\item tartalmi idézet hivatkozás megjelölése nélkül;
+\item más publikált gondolatainak saját gondolatként való feltüntetése.
+\end{itemize}
+
+Alulírott kijelentem, hogy a plágium fogalmát megismertem, és tudomásul veszem, hogy
+plágium esetén szakdolgozatom visszautasításra kerül.
+
+\vspace*{3cm}
+
+\noindent Miskolc, \makebox[2cm]{\dotfill}. év \makebox[2cm]{\dotfill}. hó \makebox[2cm]{\dotfill}. nap
+
+\vspace*{3cm}
+
+\hfill\makebox[6cm]{\dotfill}
+
+\hfill\makebox[6cm]{Hallgató}
+
+
+
+\clearpage
+
+\newcommand{\ki}{témavezető(k)}
+\newsavebox{\alairas}
+\begin{lrbox}{\alairas}
+\begin{tabular}{c@{\hspace{2cm}}c}
+\makebox[4cm]{\dotfill} & \makebox[5cm]{\dotfill} \\
+dátum & \ki \\
+\end{tabular}
+\end{lrbox}
+\newcommand{\dotline}{\makebox[5cm]{\dotfill}}
+\newcommand{\shortdotline}{\makebox[3.5cm]{\dotfill}}
+
+\noindent 1.
+\begin{tabular}[t]{cl}
+\multirow{2}{*}{A szakdolgozat feladat módosítása}
+&szükséges (módosítás külön lapon) \\
+& nem szükséges\\[1ex]
+\end{tabular}
+
+\begin{center}
+\usebox{\alairas}
+\end{center}
+
+\smallskip
+
+\noindent 2. A feladat kidolgozását ellenőriztem:
+
+\begin{center}
+\begin{tabular}{c@{\hspace*{2cm}}c}
+témavezető (dátum, aláírás): & konzulens (dátum, aláírás):\\
+\dotline & \dotline \\
+\dotline & \dotline \\
+\dotline & \dotline
+\end{tabular}
+\end{center}
+
+\smallskip
+
+\noindent 3. A szakdolgozat beadható:
+
+\begin{center}
+\usebox{\alairas}
+\end{center}
+
+\noindent 4.
+\begin{tabular}[t]{@{}l@{\hspace*{1mm}}l@{\hspace*{1mm}}l}
+A szakdolgozat & \shortdotline & szövegoldalt\\
+              & \shortdotline & program protokollt (listát, felhasználói leírást)\\
+              & \shortdotline & elektronikus adathordozót (részletezve)\\
+              & \shortdotline \\
+              & \shortdotline & egyéb mellékletet (részletezve)\\
+              & \shortdotline
+\end{tabular}
+\newline tartalmaz.
+
+\begin{center}
+\usebox{\alairas}
+\end{center}
+
+\noindent 5.
+\begin{tabular}[t]{ll}
+\multirow{2}{*}{A szakdolgozat bírálatra} & bocsátható\\
+& nem bocsátható\\
+\end{tabular}
+
+\smallskip
+
+\noindent A bíráló neve: \makebox[8cm]{\dotfill}
+
+\renewcommand{\ki}{szakfelelős}
+\begin{center}
+\begin{tabular}{c@{\hspace{2cm}}c}
+\makebox[4cm]{\dotfill} & \makebox[5cm]{\dotfill} \\
+dátum & \ki \\
+\end{tabular}
+\end{center}
+
+\noindent 6.
+\begin{tabular}[t]{lll}
+A szakdolgozat osztályzata \\
+& a témavezető javaslata: & \makebox[2.5cm]{\dotfill} \\
+& a bíráló javaslata: & \makebox[2.5cm]{\dotfill} \\
+& a szakdolgozat végleges eredménye: & \makebox[2.5cm]{\dotfill}
+\end{tabular}
+
+\bigskip\bigskip
+
+\noindent Miskolc, \makebox[4cm]{\dotfill} \hfill \makebox[8cm]{\dotfill}
+
+\hfill \makebox[8cm]{a Záróvizsga Bizottság Elnöke}

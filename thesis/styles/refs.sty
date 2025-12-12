@@ -1,0 +1,41 @@
+%%hivatkozások beállítása, ``automatizálása''
+
+% a tényleges munkát végző csomag
+\usepackage{cleveref}
+
+%% magyar formátumú hivatkozások: a/az névelő + sorszám + pont + szóköz + hivatkozott objektum típusa
+% kis ill. nagy betűs verzió
+\newcommand{\mref}[1]{\aref{#1}.\ \namecref{#1}}
+\newcommand{\Mref}[1]{\Aref{#1}.\ \namecref{#1}}
+
+% magyar oldalhivatkozás, kis-és nagybetűs verzió, ill. alias
+\newcommand{\mpref}[1]{\apageref{#1}. oldal}
+\newcommand{\Mpref}[1]{\Apageref{#1}. oldal}
+\let\mpageref\mpref
+\let\Mpageref\Mpref
+
+% típusok magyar nevének beállítása
+
+\crefname{part}{rész}{részek}
+\crefname{chapter}{fejezet}{fejezetek}
+\crefname{section}{szakasz}{szakaszok}
+\crefname{subsection}{alszakasz}{alszakaszok}
+%\crefname{subsubsection}{al-alszakasz}{al-alszakaszok}
+%\crefname{paragraph}{paragrafus}{paragrafusok}
+%\crefname{subparagraph}{al-paragrafus}{al-paragrafusok}
+
+\crefname{figure}{ábra}{ábrák}
+\crefname{table}{táblázat}{táblázatok}
+
+\crefname{theorem}{tétel}{tételek}
+\crefname{definition}{definíció}{definíciók}
+\crefname{lemma}{lemma}{lemmák}
+\crefname{corollary}{következmény}{következmények}
+\crefname{remark}{megjegyzés}{megjegyzések}
+\crefname{example}{példa}{példák}
+
+\crefname{listing}{programkód}{programkódok}
+%\crefname{algorithm}{algoritmus}{algoritmusok}
+
+% ha saját floatot vagy tételkörnyezetet definiálunk, állítsuk be a nevét!
+% \crefname{típus}{egyes szám}{többes szám}

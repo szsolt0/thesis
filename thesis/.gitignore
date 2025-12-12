@@ -1,0 +1,53 @@
+# LaTeX intermediate files
+*.aux
+*.bbl
+*.bcf
+*.blg
+*.fdb_latexmk
+*.fls
+*.lof
+*.log
+*.lot
+*.out
+*.toc
+*.synctex.gz
+*.synctex
+*.nav
+*.snm
+*.vrb
+*.xdv
+*.run.xml
+
+# The thesis itself
+dolgozat.pdf
+
+# When using glossaries / nomenclature / indexing
+*.acn
+*.acr
+*.alg
+*.glg
+*.glo
+*.gls
+*.ist
+*.nlo
+*.nls
+
+# LaTeXmk specific temporary directories
+latexmk.out/
+tmp/
+_build/
+
+# XeLaTeX / LuaLaTeX font cache
+*.lua
+*.scn
+
+# Old-style DVI/PS outputs
+*.dvi
+*.ps
+
+# Ignore editor/IDE files
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
