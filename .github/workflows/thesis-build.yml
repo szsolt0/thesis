@@ -1,0 +1,42 @@
+name: Build Thesis PDF
+
+on:
+  push:
+    paths:
+      - "thesis/**"                 # only when thesis/ changes
+      - ".github/workflows/thesis-build.yml"
+  workflow_dispatch:                # allow manual runs
+
+permissions:
+  contents: write                   # needed to create releases
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Compile thesis with latexmk
+        uses: xu-cheng/latex-action@v4
+        with:
+          working_directory: thesis
+          root_file: dolgozat.tex
+          args: -pdf -file-line-error -halt-on-error -interaction=nonstopmode
+
+
+      - name: Upload PDF as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: thesis-pdf
+          path: thesis/dolgozat.pdf
+
+      - name: Create GitHub Release with PDF
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: thesis-${{ github.sha }}
+          name: "Thesis build – ${{ github.sha }}"
+          files: thesis/dolgozat.pdf
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
