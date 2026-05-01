@@ -64,11 +64,13 @@ elérését erősen korlátozzák.
 
 \subsection{Klasszikus Unix mechanizmusok}
 
-A Unix világban régóta léteznek olyan primitívek, mint a \texttt{chroot} vagy
+A Unix világban régóta léteznek olyan primitívek, mint a \texttt{chroot}
+\cite{linux_chroot_2} vagy
 a különböző jail- és konténer-megoldások. Ezek alapvetően egy \emph{fájlrendszer
 és névterek szintjén} korlátozott környezetet hoznak létre a folyamat számára.
 A modern konténertechnológiák (Docker, LXC stb.) ezekre a mechanizmusokra és
 további kernel-funkciókra (namespace-ek, cgroupok) építenek.
+\cite{docker_engine_security} \cite{lxc_introduction}
 
 Ezek a megoldások ugyan hatékonyak lehetnek izoláció szempontjából, de
 fejlesztői szemmel nézve gyakran nehezen kezelhetők, rendszerszintű
@@ -80,17 +82,18 @@ használhatók legyenek.
 \subsection{OpenBSD \texttt{pledge} és \texttt{unveil}}
 
 Az OpenBSD egyik fontos újítása a \texttt{pledge} és \texttt{unveil}
-mechanizmus bevezetése volt. A \texttt{pledge} lényege, hogy a folyamat
+mechanizmus bevezetése volt.
+A \texttt{pledge} lényege, hogy a folyamat
 deklaratív módon kijelenti, milyen „képességekre” (syscall-kategóriákra) van
 szüksége: például fájlkezelés, hálózat, szkriptek futtatása stb. A kernel ez
 után figyeli a rendszerhívásokat, és ha a folyamat olyasmit próbál tenni, amit
-nem pledge-elt, a kernel azonnal leállítja.
+nem pledge-elt, a kernel azonnal leállítja. \cite{openbsd_pledge_2}
 
 Az \texttt{unveil} ezzel párhuzamosan a fájlrendszer eléréséhez kínál egy
 egyszerű, deklaratív modellt: az alkalmazás megadhatja, mely útvonalakat
 érheti el és milyen módon (olvasás, írás, futtatás). A korábban látott,
 „mindenre rálátó” fájlrendszer-kép helyett a folyamat gyakorlatilag egy
-szűkített nézetet kap.
+szűkített nézetet kap. \cite{openbsd_unveil_2}
 
 Ezek a megoldások fontos koncepcionális példát jelentenek: a biztonsági
 mechanizmusok \emph{fejlesztő-barát}, jól érthető API-n keresztül válnak
@@ -108,13 +111,17 @@ követi: a \texttt{seccomp} rész nagy vonalakban a \texttt{pledge}, a
 A Linux kernel a \emph{Linux Security Module} (LSM) keretrendszerrel teszi
 lehetővé különböző biztonsági modellek és modulok plug-in jellegű
 integrációját. Ennek legismertebb példái a SELinux, az AppArmor, a Smack és a
-legújabb generációs Landlock LSM.
+legújabb generációs Landlock LSM. \cite{linux_landlock_lsm}
 
 Az LSM-modulok közös jellemzője, hogy mélyen integrálódnak a kernel
 működésébe, és különböző hookokon keresztül ellenőrzik az olyan műveleteket,
-mint a fájlmegnyitás, hálózati kapcsolat létrehozása, folyamatok létrehozása
-stb. A SELinux például összetett címkézési és szabályrendszert használ,
-AppArmor pedig útvonal-alapú profilokat vezet be.
+mint a fájlmegnyitás, hálózati kapcsolat létrehozása vagy folyamatok
+létrehozása \cite{linux_lsm_hooks}. A SELinux például összetett címkézési
+és szabályrendszert használ, és többek között Type Enforcement, RBAC és MLS
+alapú kötelező hozzáférés-vezérlési modelleket támogat
+\cite{selinux_8}. Az AppArmor ezzel szemben
+profilokra épülő, útvonal-alapú hozzáférés-vezérlési modellt alkalmaz
+\cite{linux_apparmor_lsm}.
 
 Ezek erőteljes eszközök, de konfigurációjuk sokszor bonyolult, disztribúció-
 specifikus, és a mindennapi alkalmazásfejlesztés szintjéről nehezebben

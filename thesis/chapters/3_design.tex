@@ -1,6 +1,10 @@
 \chapter{Tervezés}
 
-Ebben a fejezetben kerül bemutatásra a dolgozat gyakorlati részének központi eleme, a Linux alapú folyamat-szintű sandboxolást támogató C++ könyvtár tervezése. A könyvtár célja, hogy a kernel által biztosított, viszonylag alacsony szintű biztonsági primitíveket — elsősorban a seccomp és a Landlock mechanizmusokat — egy, a fejlesztők számára könnyebben használható, magasabb szintű API-n keresztül tegye elérhetővé.
+Ebben a fejezetben kerül bemutatásra a dolgozat gyakorlati részének központi
+eleme, a Linux alapú folyamat-szintű sandboxolást támogató C++ könyvtár
+tervezése. A könyvtár célja, hogy a kernel által biztosított,
+viszonylag alacsony szintű biztonsági primitíveket — elsősorban a seccomp
+és a Landlock mechanizmusokat — egy, a fejlesztők számára könnyebbenhasználható, magasabb szintű API-n keresztül tegye elérhetővé.
 
 A tervezés során két fő szempont vezérelte a munkát:
 
@@ -9,7 +13,7 @@ A tervezés során két fő szempont vezérelte a munkát:
   \item \textbf{Egyszerű, modern C++ API}: a felület illeszkedjen a modern C++ (C++20/23) elveihez, használja a típusrendszer és az erőforrás-kezelés (RAII) eszközeit, valamint nyújtson jól értelmezhető, \texttt{std::expected}-alapú hibakezelést.
 \end{itemize}
 
-A könyvtár felépítése szándékosan elkülöníti a \emph{rendszerhívás-szintű} és a \emph{fájlrendszer-szintű} sandboxolást. Ez a szétválasztás hasonló elvet követ, mint az OpenBSD-n ismert \texttt{pledge} és \texttt{unveil} mechanizmusok: az egyik komponens elsősorban azt szabályozza, hogy a folyamat milyen típusú rendszerhívásokat végezhet, míg a másik azt, hogy a fájlrendszer mely részei és milyen módon érhetők el.
+A könyvtár felépítése szándékosan elkülöníti a \emph{rendszerhívás-szintű} és a \emph{fájlrendszer-szintű} sandboxolást. Ez a szétválasztás hasonló elvet követ, mint az OpenBSD-n ismert \texttt{pledge} és \texttt{unveil} mechanizmusok: az egyik komponens elsősorban azt szabályozza, hogy a folyamat milyen típusú rendszerhívásokat végezhet, míg a másik azt, hogy a fájlrendszer mely részei és milyen módon érhetők el. \cite{openbsd_pledge_2} \cite{openbsd_unveil_2}
 
 \section{Magas szintű architektúra}
 
