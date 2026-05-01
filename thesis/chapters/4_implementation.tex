@@ -1,3 +1,139 @@
 \chapter{Megvalósítás}
 
 \textbf{TODO:} megírni ezt a részt.
+
+\section{Rendszerhívások}
+
+Az implementáció közvetlen rendszerhívásokat használ. Ennek elsődleges oka,
+hogy a könyvtár olyan Linux-specifikus funkciókat is elérjen, amelyekhez nem
+minden esetben érhető el szabványos vagy hordozható libc wrapper. Ilyen
+esetekben a rendszerhívás közvetlen meghívása egyszerűbb és kiszámíthatóbb
+megoldást biztosít, mivel az implementáció nem függ a C könyvtár által
+biztosított absztrakcióktól.
+
+A könyvtárban definiált rendszerhívás-burkoló függvények nevei és paraméterei
+többnyire követik a megfelelő Linux rendszerhívások konvencióit. A libc
+függvényekkel való névütközés elkerülése érdekében ezek a függvények
+\texttt{sys\_} prefixet kapnak. Például a \texttt{write} rendszerhíváshoz
+tartozó wrapper neve \texttt{sys\_write}.
+
+A tényleges rendszerhívások végrehajtását a \texttt{raw\_syscall0},
+\ldots, \texttt{raw\_syscall6}, valamint az \texttt{exit\_group}
+függvények valósítják meg. Ezek a függvények architektúra-specifikus, GCC/Clang
+által támogatott kiterjesztett inline assemblyt használnak, és közvetlenül a
+Linux rendszerhívási interfészt hívják meg.
+
+Fontos különbség a libc függvényekhez képest, hogy a nyers Linux
+rendszerhívások nem az \texttt{errno} változón keresztül jelzik a hibákat.
+Sikertelen hívás esetén a visszatérési érték egy negatív hibakód, amely
+általában a $[-4095, -1]$ intervallumba esik. Ennek abszolút értéke felel meg
+annak a hibakódnak, amelyet a libc wrapper normál esetben az \texttt{errno}
+változóba írna. Mivel az implementáció közvetlen rendszerhívásokat használ, a
+hibakódok közvetlenül a visszatérési értékből kezelhetők.
+
+\section{Seccomp szűrők létrehozása}
+
+A könyvtár a rendszerhívások korlátozására a Linux \texttt{seccomp}
+mechanizmusának \texttt{SECCOMP\_SET\_MODE\_FILTER} módját használja. Ebben az
+üzemmódban a folyamat egy klasszikus BPF programot ad át a kernelnek, amely
+minden rendszerhívás előtt lefut. A BPF program a rendszerhívás sorszáma, az
+architektúra és a rendszerhívás argumentumai alapján dönt arról, hogy az adott
+hívás engedélyezett-e.
+
+Az implementációban a seccomp szabályok \texttt{sock\_filter} elemekből álló
+tömbként jelennek meg. Ezekből a tömbökből egy \texttt{sock\_fprog} struktúra
+készül, amely tartalmazza a program hosszát és a BPF utasításokra mutató
+pointert. Ezt a struktúrát adja át a könyvtár a \texttt{seccomp}
+rendszerhívásnak.
+
+A BPF program minden esetben egy közös bevezető résszel kezdődik. Ez először
+ellenőrzi, hogy a rendszerhívás az elvárt architektúráról, jelen esetben
+\texttt{x86\_64}-ről érkezik-e. Amennyiben az architektúra nem egyezik, a
+szűrő azonnal a teljes folyamat leállítását kéri a kerneltől. Ezután a program
+betölti a rendszerhívás sorszámát, amely alapján a további szabályok
+döntenek az engedélyezésről vagy tiltásról.
+
+Az architektúra ellenőrzése különösen fontos, mert a rendszerhívások sorszámai
+architektúránként eltérhetnek. Egy másik architektúrán ugyanaz a szám más
+rendszerhívást jelenthetne, ezért a szűrő csak akkor értelmezhető biztonságosan,
+ha először meggyőződik arról, hogy a \texttt{seccomp\_data.arch} mező értéke
+\texttt{AUDIT\_ARCH\_X86\_64}.
+
+A szabályok létrehozását makrók segítik. Az \texttt{ALLOW\_SYSCALL} makró egy
+konkrét rendszerhívást engedélyez, míg az
+\texttt{ALLOW\_SYSCALL\_RANGE} egy zárt intervallumba eső rendszerhívásokat
+enged át. A szabálylista végére mindig egy alapértelmezett tiltó szabály kerül:
+ez vagy a teljes folyamatot állítja le
+\texttt{SECCOMP\_RET\_KILL\_PROCESS} visszatérési értékkel, vagy csak az
+aktuális szálat \texttt{SECCOMP\_RET\_KILL\_THREAD} használatával. Így a
+szűrő alapértelmezetten tiltó jellegű: csak azok a rendszerhívások hajthatók
+végre, amelyekre a program explicit engedélyező szabályt tartalmaz.
+
+\begin{lstlisting}[language=C++,caption={Seccomp BPF szabályokat létrehozó segédmakrók}]
+#define ALLOW_SYSCALL_RANGE(min, max) \
+    BPF_JUMP(BPF_JMP + BPF_JGE + BPF_K, min, 0, 2), \
+    BPF_JUMP(BPF_JMP + BPF_JGT + BPF_K, max, 1, 0), \
+    BPF_STMT(BPF_RET + BPF_K, SECCOMP_RET_ALLOW)
+
+#define ALLOW_SYSCALL(nr) \
+    BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K, nr, 0, 1), \
+    BPF_STMT(BPF_RET + BPF_K, SECCOMP_RET_ALLOW)
+
+#define END_KILL_PROCESS() \
+    BPF_STMT(BPF_RET + BPF_K, SECCOMP_RET_KILL_PROCESS)
+\end{lstlisting}
+
+A könyvtár
+több kisebb szabálykategóriát is definiál. Ilyen például a \texttt{basic},
+az \texttt{io} és a \texttt{sandbox} kategória. A \texttt{basic} kategória az
+alapvető működéshez szükséges rendszerhívásokat tartalmazza, például a
+memóriakezeléshez, jelzéskezeléshez és a folyamat befejezéséhez kapcsolódó
+hívásokat. Az \texttt{io} kategória a be- és kimeneti műveletekhez szükséges
+rendszerhívásokat engedélyezi, például a \texttt{read}, \texttt{write},
+\texttt{pread}, \texttt{pwrite}, \texttt{readv}, \texttt{writev} és
+\texttt{sendfile} hívásokat. A \texttt{sandbox} kategória azokat a
+rendszerhívásokat tartalmazza, amelyek további sandbox mechanizmusok
+bekapcsolásához szükségesek, például a \texttt{seccomp} és a Landlockhoz
+kapcsolódó rendszerhívások.
+
+\subsection{A seccomp builder működése}
+
+A szűrők összeállítását a \texttt{SeccompBuilder} osztály végzi. A builder
+belsőleg egy \texttt{std::vector<sock\_filter>} tárolót használ, amelybe
+egymás után kerülnek be a BPF utasítások. Az inicializálás során először a
+közös bevezető rész kerül a szűrő elejére, majd az alapértelmezett
+\texttt{basic} szabályok. Az \texttt{init\_no\_defaults} változat ezzel
+szemben csak a bevezető részt adja hozzá, és nem engedélyez automatikusan
+semmilyen kategóriát.
+
+A felhasználó az \texttt{allow} függvénnyel adhat hozzá további
+szabálykategóriákat. A függvény név alapján megkeresi a megfelelő
+\texttt{sock\_fprog} struktúrát, majd annak utasításait hozzáfűzi a builder
+belső szűrőlistájához. Ha a megadott kategória nem létezik, a függvény
+\texttt{ENOENT} hibával tér vissza. Ha a buildert már lezárták, akkor újabb
+szabály hozzáadása nem engedélyezett, ilyenkor \texttt{EALREADY} hibát ad
+vissza.
+
+A szűrő véglegesítését a \texttt{build\_static} függvény végzi. Ekkor kerül
+a szabálylista végére az alapértelmezett tiltó szabály, amely vagy a teljes
+folyamatot, vagy csak az aktuális szálat állítja le. Ezután a builder lezárt
+állapotba kerül, így a szűrő tartalma többé nem módosítható.
+
+A véglegesített BPF program számára az implementáció külön memóriaterületet
+foglal a \texttt{mmap} rendszerhívással. A builder először írható és olvasható
+memóriát kér, majd ebbe átmásolja az összeállított \texttt{sock\_filter}
+elemeket. A másolás után a memóriaterületet \texttt{mprotect} segítségével
+csak olvashatóvá teszi. Ennek célja, hogy a már elkészült szűrőprogram ne
+módosulhasson véletlenül a további futás során.
+
+A létrehozott szűrőre a \texttt{SeccompRuleView} objektum mutat. Ez egy
+nézet jellegű objektum, amely a \texttt{sock\_fprog} struktúrát tartalmazza.
+A \texttt{build} függvény erre építve hoz létre birtokló
+\texttt{SeccompRule} objektumot.
+
+A kész szűrő aktiválása a \texttt{seccomp} rendszerhívással történik. Az
+implementáció a \texttt{SECCOMP\_SET\_MODE\_FILTER} műveletet használja, és
+a korábban létrehozott \texttt{sock\_fprog} struktúrát adja át a kernelnek.
+Siker esetén a hívás nulla értékkel tér vissza. Hiba esetén a nyers
+rendszerhívás negatív hibakódot ad vissza, amelyet a könyvtár
+\texttt{std::expected<void, int>} formában továbbít a hívó felé.
