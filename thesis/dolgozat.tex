@@ -20,6 +20,25 @@
 \usepackage{hyperref}
 % cleveref csomag és beállításai -- az egyetlen, amit a hyperref után kell betölteni!
 \usepackage{styles/refs}
+\usepackage{xurl}
+% overfull \hbox ellen
+\usepackage[
+  protrusion=true,
+  expansion=true,
+  factor=1100,
+  stretch=20,
+  shrink=20
+]{microtype}
+
+\lstset{
+  basicstyle=\ttfamily\small,
+  columns=fullflexible,
+  keepspaces=true,
+  breaklines=true,
+  breakatwhitespace=false
+}
+
+\newcommand{\code}[1]{{\ttfamily\small#1}}
 
 \begin{document}
 

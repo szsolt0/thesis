@@ -1,119 +1,277 @@
 \chapter{Tervezés}
 
-Ebben a fejezetben kerül bemutatásra a dolgozat gyakorlati részének központi
-eleme, a Linux alapú folyamat-szintű sandboxolást támogató C++ könyvtár
-tervezése. A könyvtár célja, hogy a kernel által biztosított,
-viszonylag alacsony szintű biztonsági primitíveket — elsősorban a seccomp
-és a Landlock mechanizmusokat — egy, a fejlesztők számára könnyebbenhasználható, magasabb szintű API-n keresztül tegye elérhetővé.
+Ebben a fejezetben a dolgozat gyakorlati részének központi eleme, egy Linux
+alapú, folyamat-szintű sandboxolást támogató C++ könyvtár tervezése kerül
+bemutatásra. A könyvtár célja, hogy a Linux kernel által biztosított, viszonylag
+alacsony szintű biztonsági primitíveket -- elsősorban a seccomp és a Landlock
+mechanizmusokat -- egy magasabb szintű, alkalmazásfejlesztői szempontból
+könnyebben használható API-n keresztül tegye elérhetővé.
 
-A tervezés során két fő szempont vezérelte a munkát:
+A tervezés során két fő szempont kapott kiemelt szerepet:
 
 \begin{itemize}
-  \item \textbf{Biztonságos alapértelmezések}: a könyvtár használata közben a fejlesztő lehetőleg kevés döntéssel is „elég jó” védelmet érjen el, ne kelljen minden részletet a Linux kernel dokumentációjából ismernie.
-  \item \textbf{Egyszerű, modern C++ API}: a felület illeszkedjen a modern C++ (C++20/23) elveihez, használja a típusrendszer és az erőforrás-kezelés (RAII) eszközeit, valamint nyújtson jól értelmezhető, \texttt{std::expected}-alapú hibakezelést.
+  \item \emph{Biztonságos alapértelmezések}: a könyvtár használata során a
+  fejlesztő már kevés konfigurációval is érdemi védelmet érhessen el, anélkül,
+  hogy minden részletében ismernie kellene a Linux kernel biztonsági
+  mechanizmusainak működését.
+
+  \item \emph{Egyszerű, modern C++ API}: a publikus felület illeszkedjen a
+  modern C++ szemléletéhez, használja a típusrendszer és az RAII-alapú
+  erőforrás-kezelés előnyeit, valamint biztosítson jól követhető,
+  \code{std::expected}-alapú hibakezelést.
 \end{itemize}
 
-A könyvtár felépítése szándékosan elkülöníti a \emph{rendszerhívás-szintű} és a \emph{fájlrendszer-szintű} sandboxolást. Ez a szétválasztás hasonló elvet követ, mint az OpenBSD-n ismert \texttt{pledge} és \texttt{unveil} mechanizmusok: az egyik komponens elsősorban azt szabályozza, hogy a folyamat milyen típusú rendszerhívásokat végezhet, míg a másik azt, hogy a fájlrendszer mely részei és milyen módon érhetők el. \cite{openbsd_pledge_2} \cite{openbsd_unveil_2}
+A könyvtár felépítése szándékosan elkülöníti a
+\emph{rendszerhívás-szintű} és a \emph{fájlrendszer-szintű} sandboxolást. Ez a
+szétválasztás hasonló gondolatot követ, mint az OpenBSD-ben ismert
+\code{pledge} és \code{unveil} mechanizmusok: az egyik komponens azt
+korlátozza, hogy a folyamat milyen típusú rendszerhívásokat hajthat végre, míg
+a másik azt szabályozza, hogy a fájlrendszer mely részei és milyen jogosultságok
+mellett érhetők el. \cite{openbsd_pledge_2} \cite{openbsd_unveil_2}
 
 \section{Magas szintű architektúra}
 
 A könyvtár logikailag két fő almodulra bontható:
 
 \begin{enumerate}
-  \item \textbf{Seccomp modul}: a folyamat által használható rendszerhívások szűréséért felel, BPF-alapú seccomp szűrők segítségével.
-  \item \textbf{Landlock modul}: a fájlrendszer-hozzáférések (olvasás, írás, futtatás) finomhangolt korlátozását valósítja meg a Landlock LSM felületén keresztül.
+  \item \emph{Seccomp modul}: a folyamat által használható rendszerhívások
+  korlátozásáért felel, klasszikus BPF-alapú seccomp szűrők segítségével.
+
+  \item \emph{Landlock modul}: a fájlrendszer-hozzáférések, például az
+  olvasás, írás és futtatás finomhangolt szabályozását valósítja meg a
+  Landlock LSM felületén keresztül.
 \end{enumerate}
 
-A felhasználó szemszögéből a könyvtár egy „kétkarú” API-ként jelenik meg: a fejlesztő dönthet úgy, hogy csak a seccomp részt használja, csak a Landlock részt használja, vagy a kettőt kombinálja. A tervezés célja az volt, hogy a két modul egymástól lazán csatolt legyen, ugyanakkor szerkezetük és használati mintáik minél inkább hasonlítsanak egymásra. Ezáltal a fejlesztő könnyebben elsajátíthatja mindkét rész használatát, és egységes mentális modellt alakíthat ki a sandboxolásról.
+A felhasználó szempontjából a könyvtár egy két részből álló API-ként jelenik
+meg. A fejlesztő dönthet úgy, hogy csak a seccomp modult használja, csak a
+Landlock modult alkalmazza, vagy a kettőt együtt használja. A tervezés célja az
+volt, hogy a két modul egymástól függetlenül is használható legyen, ugyanakkor
+felépítésük és használati mintáik hasonló logikát kövessenek. Ez megkönnyíti a
+könyvtár elsajátítását, és egységesebb mentális modellt ad a sandboxolás
+folyamatáról.
 
-Az architektúra osztály-diagramjai a későbbi alfejezetekben kerülnek részletezésre; a \emph{Seccomp} rész fő osztályait az \ref{fig:seccomp-class-diagram}. ábra, a \emph{Landlock} rész fő osztályait az \ref{fig:landlock-class-diagram}. ábra szemlélteti (az ábrák UML osztálydiagram formájában mutatják be a publikus API-t és a fontosabb belső függőségeket).
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=4cm]{images/landlock.pdf}
+    \caption{A Landlock alapú szabályrendszer osztálydiagramja}
+    \label{fig:landlock-class-diagram}
+\end{figure}
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.4\textwidth]{images/seccomp.pdf}
+    \caption{A seccomp alapú szabályrendszer osztálydiagramja}
+    \label{fig:seccomp-class-diagram}
+\end{figure}
+
+Az architektúra osztálydiagramjai a későbbi alfejezetekben kerülnek
+részletezésre. A seccomp rész fő osztályait az
+\ref{fig:seccomp-class-diagram}. ábra, a Landlock rész fő osztályait pedig az
+\ref{fig:landlock-class-diagram}. ábra szemlélteti. Az ábrák UML
+osztálydiagram formájában mutatják be a publikus API-t és a fontosabb belső
+függőségeket.
 
 \section{Seccomp-alapú folyamat-szintű sandboxolás}
 
-A seccomp modul célja, hogy a viszonylag összetett BPF szűrőkészítés és a \texttt{seccomp(2)} rendszerhívás körüli részletek helyett egy magasabb szintű, deklaratívabb API-t kínáljon. A tervezés központi eleme itt a \textbf{builder minta} alkalmazása: a folyamat számára engedélyezett rendszerhívások (illetve syscall-csoportok) egy lépésről lépésre felépített konfigurációban kerülnek rögzítésre.
+A seccomp modul célja, hogy a BPF szűrők manuális összeállításához és a
+\code{seccomp(2)} rendszerhívás közvetlen használatához képest egy magasabb
+szintű, deklaratívabb felületet biztosítson. A tervezés központi eleme a
+\emph{builder minta}: a folyamat számára engedélyezett rendszerhívások,
+illetve rendszerhívás-csoportok egy fokozatosan felépített konfigurációban
+kerülnek rögzítésre.
 
 \subsection{Főbb osztályok és felelősségek}
 
-A seccomp rész alapvetően három osztály köré szerveződik:
+A seccomp modul három fő osztály köré szerveződik:
 
 \begin{itemize}
-  \item \texttt{SeccompRuleView}: egy elkészült, immutábilis seccomp szűrő „nézete”, amely a kernel felé már közvetlenül alkalmazható struktúrát (\texttt{sock\_fprog}) foglalja magába.
-  \item \texttt{SeccompRule}: egy RAII jellegű burkoló, amely egy \texttt{SeccompRuleView}-t tartalmaz, és biztosítja, hogy a létrehozott szabály élettartama kontrollált módon kezelhető legyen a C++ típusrendszerén keresztül.
-  \item \texttt{SeccompBuilder}: az a komponens, amely a felhasználó deklaratív beállításai alapján felépíti a megfelelő BPF programot, majd ebből létrehozza a \texttt{SeccompRule} objektumot.
+  \item \code{SeccompRuleView}: egy elkészült seccomp szűrő nem birtokló
+  nézete. A kernel felé közvetlenül átadható \code{sock\_\allowbreak fprog} struktúrát
+  foglalja magába.
+
+  \item \code{SeccompRule}: RAII jellegű burkoló, amely a létrehozott
+  seccomp szabályhoz tartozó erőforrások élettartamát kezeli, és egy
+  \code{SeccompRuleView} nézeten keresztül teszi elérhetővé az alkalmazható
+  szabályt.\footnote{A \code{SeccompRuleView} nem birtokolja a mögötte lévő
+  BPF programot, csak hivatkozik rá. Emiatt nem használható tovább, ha az azt
+  tároló \code{SeccompRule} objektum már megszűnt; ennek biztosítása a
+  felhasználó feladata.}
+
+  \item \code{SeccompBuilder}: a felhasználó által megadott deklaratív
+  beállítások alapján összeállítja a megfelelő BPF programot, majd ebből
+  létrehozza a \code{SeccompRule} objektumot.
 \end{itemize}
 
-A \texttt{SeccompRuleView} és a \texttt{SeccompRule} koncepciója szétválasztja a „nyers” kernelstruktúrák kezelését az RAII logikától. A \texttt{SeccompBuilder} felelős a BPF program összeállításáért, és \texttt{std::expected}-et ad vissza, így a hibakezelés kifejezően és kivételmentes módon valósítható meg.
+A \code{SeccompRuleView} és a \code{SeccompRule} szétválasztása azt a célt
+szolgálja, hogy elkülönüljön a kernel felé átadható, nézet jellegű struktúra és
+az erőforrások tényleges birtoklása. A \code{SeccompBuilder} felel a BPF
+program összeállításáért, és \code{std::expected}-alapú visszatérési értékeket
+használ, így a hibakezelés explicit és kivételmentes módon történik.
 
 \subsection{Használati minta tervezése}
 
-A tervezés során cél volt, hogy a könyvtár használata a fejlesztő számára néhány lépésben leírható legyen, például:
+A tervezés során fontos szempont volt, hogy a seccomp használata néhány
+egymásra épülő lépésként legyen leírható:
 
 \begin{enumerate}
-  \item \texttt{SeccompBuilder::init()} meghívása, amely ellenőrzi, hogy a kernel támogatja-e a szükséges seccomp funkciókat, és előkészíti a szűrő összeállítását.
-  \item Előre definiált vagy névvel hivatkozott syscall-csoportok engedélyezése, például \texttt{builder->allow("io")} jellegű hívásokkal.
-  \item A kész szabály \texttt{build()} metódussal történő összeállítása, amely \texttt{std::expected<SeccompRule, int>} típust ad vissza.
-  \item A létrehozott szabály alkalmazása, például \texttt{rule->apply()}, ami a \texttt{seccomp(2)} rendszerhívást hívja meg a megfelelő paraméterekkel.
+  \item A \code{SeccompBuilder::init()} meghívása inicializálja a buildert,
+  ellenőrzi a szükséges feltételeket, és előkészíti a szűrő összeállítását.
+
+  \item A fejlesztő előre definiált rendszerhívás-csoportokat engedélyezhet,
+  például \code{allow("io")} jellegű hívásokkal.
+
+  \item A \code{build()} metódus véglegesíti a konfigurációt, és
+  \code{std::\allowbreak expected} típusú
+  eredményt ad vissza.
+
+  \item A létrehozott szabály a \code{apply()} hívással aktiválható,
+  amely a \code{seccomp(2)} rendszerhíváson keresztül tölti be a szűrőt a
+  kernelbe.
 \end{enumerate}
 
-Ezzel a mintával a seccomp használata a fejlesztő szemszögéből egy viszonylag egyszerű, deklaratív folyamatként jelenik meg: „ezeket a képességeket szeretném megőrizni, minden mást kérem tiltani”. A részletes BPF program generálásának logikája rejtve marad az API mögött.
+Ez a használati minta a seccomp konfigurálását egy deklaratív folyamattá
+alakítja: a fejlesztő azt adja meg, hogy milyen képességeket szeretne
+megtartani, a könyvtár pedig ezek alapján állítja elő az alacsony szintű BPF
+programot. A részletes BPF generálási logika így a publikus API mögött marad.
 
 \section{Landlock-alapú fájlrendszer-sandboxolás}
 
-A másik fő komponens a fájlrendszer-szintű hozzáférés-szabályozást megvalósító Landlock modul. A tervezés alapelve itt az volt, hogy a felhasználó egy jól áttekinthető, típusbiztos módon adhassa meg, milyen útvonalak és milyen hozzáférési jogok mellett legyenek elérhetők a folyamat számára. A Landlock modul központi elemei az \texttt{LandlockAccess} felsorolás, a \texttt{LandlockRuleSet} osztály, valamint egy belső, alapértelmezett útvonalakat tartalmazó struktúra.
+A másik fő komponens a fájlrendszer-szintű hozzáférés-szabályozást megvalósító
+Landlock modul. Ennek célja, hogy a fejlesztő áttekinthető és típusbiztos módon
+adhassa meg, mely útvonalak milyen jogosultságokkal legyenek elérhetők a
+folyamat számára. A Landlock modul központi elemei a \code{LandlockAccess}
+felsorolás, a \code{LandlockRuleSet} osztály, valamint az alapértelmezett
+útvonalakat tartalmazó belső struktúra.
 
-\subsection{\texttt{LandlockAccess} -- típusbiztos jogosultságmodell}
-
-A \texttt{LandlockAccess} egy \texttt{enum class}, amely \texttt{\_\_u64} alapú bitmaszkon reprezentálja a különböző fájlrendszer-hozzáférési jogokat:
-
-\begin{itemize}
-  \item \texttt{Read}: fájlok olvasása,
-  \item \texttt{Write}: fájlok írása és truncálása,
-  \item \texttt{Execute}: fájlok futtatása,
-  \item valamint ezek kombinációi (pl. \texttt{ReadWrite}, \texttt{ReadExecute}, \texttt{All}).
-\end{itemize}
-
-A tervezés során cél volt, hogy a Landlock által elvárt, sokszor nehezen megjegyezhető kernel-konstansok (\texttt{LANDLOCK\_ACCESS\_FS\_...}) helyett egy, a C++ fejlesztők számára természetesebb, típusbiztos réteget kapjunk. A bitműveletek az enum értékek között megengedettek, így az API kényelmesen használható marad, miközben a fordító is segít a hibák elkerülésében.
-
-\subsection{Alapértelmezett útvonalak: \texttt{landlock\_default\_paths}}
-
-A Landlock konfigurálásánál gyakori igény, hogy bizonyos, a rendszer működéséhez elengedhetetlen útvonalak (például \texttt{/proc}, \texttt{/dev}, illetve disztribúció-specifikus könyvtárak) alapértelmezés szerint engedélyezettek legyenek. Ennek támogatására a tervezés része egy belső \texttt{detail::landlock\_default\_paths} struktúra, amely egy \texttt{std::span<const std::pair<char const*, LandlockAccess>>} formájában rögzíti az ilyen útvonalakat és a hozzájuk tartozó jogosultságokat.
-
-A \texttt{LandlockRuleSet} osztály \texttt{add\_defaults()} metódusa ezeket az útvonalakat járja be, és egységes módon veszi fel a rulesetbe. Így a fejlesztő egyetlen függvényhívással aktiválhat egy ésszerű alapértelmezett konfigurációt, majd ehhez képest adhat hozzá további alkalmazás-specifikus útvonalakat.
-
-\subsection{\texttt{LandlockRuleSet} -- a ruleset életciklusának kezelése}
-
-A \texttt{LandlockRuleSet} osztály a Landlock ruleset teljes életciklusát kezeli:
+A \code{LandlockAccess} egy enum osztály, amely
+bitmaszkon reprezentálja a különböző fájlrendszer-hozzáférési jogokat:
 
 \begin{itemize}
-  \item Az \texttt{init()} statikus metódus létrehozza a ruleset leírásához szükséges \texttt{landlock\_ruleset\_attr} struktúrát, beállítja a kezelt jogosultságokat, majd meghívja a \texttt{landlock\_create\_ruleset} segédfüggvényt. Ennek eredménye egy \texttt{detail::OwnedFd}-be csomagolt fájlleíró, amelyet RAII módon kezel az osztály.
-  \item Az \texttt{add\_rule(int fd, LandlockAccess access)} metódus egy már megnyitott fájlleíróra építve adja hozzá az új szabályt a rulesethez: \texttt{landlock\_path\_beneath\_attr} struktúrát tölt ki, majd meghívja a \texttt{landlock\_add\_rule} függvényt.
-  \item Az \texttt{add\_rule(char const* path, LandlockAccess access)} egy kényelmi függvény, amely az \texttt{openat} rendszerhívás RAII-s csomagolásán (\texttt{OwnedFd::openat}) keresztül maga szerzi be a szükséges fájlleírót, majd ugyanazt a logikát használja, mint az \texttt{int fd}-t fogadó változat.
-  \item Az \texttt{apply()} metódus végzi el a tényleges „lezárást” a folyamat szempontjából: meghívja a \texttt{landlock\_restrict\_self} függvényt a ruleset fájlleírójával. Ettől a ponttól a folyamat (és gyerekei) a Landlock által definiált szabályok közé lesznek szorítva.
+  \item \code{Read}: fájlok olvasása,
+  \item \code{Write}: fájlok írása és truncálása,
+  \item \code{Execute}: fájlok futtatása,
+  \item valamint ezek kombinációi, például \code{ReadWrite},
+  \code{ReadExecute} és \code{All}.
 \end{itemize}
 
-A hibakezelés minden függvénynél \texttt{std::expected<void, int>} visszatérési értékkel történik, ahol a hibakód tipikusan a negatív \texttt{errno} értékének abszolút értékeként kerül visszaadásra. Ez illeszkedik a könyvtár egészére jellemző, kivételmentes hibakezelési stratégiához.
+A cél az volt, hogy a Landlock által használt, gyakran hosszú és nehezen
+áttekinthető kernel-konstansok, például a
+\code{LANDLOCK\_\allowbreak ACCESS\_\allowbreak FS\_\allowbreak \ldots} formájú értékek helyett egy C++
+szempontból természetesebb és típusbiztosabb réteg álljon rendelkezésre. Az enum
+értékei között definiált bitműveletek lehetővé teszik a jogosultságok
+kényelmes kombinálását, miközben a fordító is segíti a hibás használat
+elkerülését.
+
+\subsection{Alapértelmezett útvonalak}
+
+A Landlock konfigurálásakor gyakori igény, hogy bizonyos, a programok
+működéséhez szükséges rendszerútvonalak alapértelmezetten elérhetők legyenek.
+Ilyen lehet például a \code{/proc}, a \code{/dev}, illetve egyes
+disztribúció-specifikus könyvtárak. Ennek támogatására a könyvtár egy belső
+struktúrát használ, amely
+tartalmazza az alapértelmezett útvonalakat és a hozzájuk tartozó jogosultságokat.
+
+A \code{LandlockRuleSet} osztály \code{add\_\allowbreak defaults()} metódusa ezeket az
+útvonalakat járja be, és egységes módon hozzáadja őket a rulesethez. Így a
+fejlesztő egyetlen hívással létrehozhat egy kiindulási konfigurációt, amelyet
+később alkalmazás-specifikus szabályokkal egészíthet ki.
+
+\subsection{LandlockRuleSet}
+
+A \code{LandlockRuleSet} osztály a Landlock ruleset teljes életciklusát
+kezeli. Feladata a ruleset létrehozása, új szabályok hozzáadása, majd a kész
+szabálykészlet alkalmazása az aktuális folyamatra.
+
+\begin{itemize}
+  \item Az \code{init()} statikus metódus létrehozza a ruleset leírásához
+  szükséges struktúrát, beállítja a kezelt
+  jogosultságokat, majd meghívja a \code{landlock\_\allowbreak create\_\allowbreak ruleset}
+  segédfüggvényt. Az eredmény egy \code{detail::OwnedFd}-be csomagolt
+  fájlleíró, amelyet az osztály RAII módon kezel.
+
+  \item Az \code{add\_\allowbreak rule(fd, access)} metódus egy már
+  megnyitott fájlleíróra építve ad hozzá új szabályt a rulesethez.
+
+  \item Az \code{add\_\allowbreak rule(path, access)} egy
+  kényelmi függvény, amely az \code{openat} függvényen keresztül szerzi be a
+  szükséges fájlleírót. Ezután ugyanazt a szabályhozzáadási logikát használja,
+  mint az \code{fd}-t fogadó változat.
+
+  \item Az \code{apply()} metódus végzi el a ruleset tényleges alkalmazását.
+  Ez a \code{landlock\_\allowbreak restrict\_\allowbreak self} függvényt hívja meg a ruleset
+  fájlleírójával. Ettől a ponttól kezdve az aktuális folyamat és annak
+  leszármazottai a Landlock által meghatározott fájlrendszer-hozzáférési
+  szabályok között működnek.
+\end{itemize}
+
+A hibakezelés minden releváns műveletnél
+\code{std::expected} visszatérési értékkel történik. A hibakódok a
+könyvtár alacsony szintű rendszerhívás-kezeléséhez igazodva jellemzően a
+negatív \code{errno} értékek abszolút értékeként jelennek meg.
 
 \section{A két modul együttműködése}
 
-A tervezés egyik fontos célja az volt, hogy a seccomp és a Landlock modul egymástól függetlenül is használható legyen, ugyanakkor jól kombinálhatók legyenek egymással. Egy tipikus használati forgatókönyv a következőképpen nézhet ki:
+A tervezés egyik lényeges célja az volt, hogy a seccomp és a Landlock modul
+önállóan is használható legyen, de egymással kombinálva is koherens
+sandboxolási modellt alkossanak. Egy tipikus használati forgatókönyv a
+következő lépésekből állhat:
 
 \begin{enumerate}
-  \item A folyamat induláskor felépít egy seccomp szabályrendszert a \texttt{SeccompBuilder} segítségével, amelyben csak az adott alkalmazás által ténylegesen használt rendszerhívások maradnak engedélyezve.
-  \item Ezzel párhuzamosan létrejön egy \texttt{LandlockRuleSet}, amelyben engedélyezésre kerülnek az alapértelmezett útvonalak (\texttt{add\_defaults()}), majd a konkrét alkalmazás által igényelt könyvtárak (konfigurációs fájlok, naplók, ideiglenes könyvtárak stb.) \texttt{add\_rule()} hívásokkal.
-  \item A folyamat először alkalmazza a seccomp szabályt (\texttt{SeccompRule::apply()}), majd a Landlock rulesetet (\texttt{LandlockRuleSet::apply()}). A két mechanizmus kombinációja eredményezi a végső sandbox állapotot.
+  \item A folyamat induláskor felépít egy seccomp szabályrendszert a
+  \code{SeccompBuilder} segítségével. Ebben csak azok a rendszerhívások vagy
+  rendszerhívás-csoportok maradnak engedélyezve, amelyekre az alkalmazásnak
+  ténylegesen szüksége van.
+
+  \item Ezzel párhuzamosan létrejön egy \code{LandlockRuleSet}, amelyben
+  először az alapértelmezett útvonalak kerülnek engedélyezésre az
+  \code{add\_\allowbreak defaults()} segítségével, majd az alkalmazás saját könyvtárai és
+  fájljai külön \code{add\_\allowbreak rule()} hívásokkal adhatók hozzá.
+
+  \item A folyamat végül alkalmazza a seccomp szabályt
+  \code{SeccompRule::apply()} hívással, majd a Landlock rulesetet
+  \code{LandlockRuleSet::apply()} segítségével. A két mechanizmus együtt
+  alakítja ki a végső sandbox állapotot.
 \end{enumerate}
 
-A kettős védelmi modell előnye, hogy egy sikeres exploit esetén is több, egymástól független keretrendszer igényeit kellene a támadónak kielégítenie: hiába fér hozzá például egy betöltött \texttt{libc} funkcióhoz, ha a szükséges rendszerhívás seccomp-alapon blokkolva van, vagy hiába fér hozzá a rendszerhíváshoz, ha a Landlock miatt a kívánt fájlútvonal már nem elérhető.
+A kombinált megközelítés előnye, hogy a két mechanizmus eltérő támadási
+felületet korlátoz. A seccomp a végrehajtható rendszerhívások körét szűkíti,
+míg a Landlock a fájlrendszer elérhető részeit korlátozza. Egy sikeres exploit
+esetén így a támadónak több, egymástól független korlátozást is meg kellene
+kerülnie. Például önmagában nem elegendő egy betöltött libc függvény
+elérése, ha a mögötte álló rendszerhívás seccomp-alapon tiltva van; ugyanígy
+egy engedélyezett rendszerhívás sem biztosít hozzáférést olyan fájlhoz, amelyet
+a Landlock szabályrendszer nem engedélyez.
 
 \section{API-tervezési szempontok}
 
-A konkrét osztályok és függvények megtervezésekor az alábbi általános irányelvek kerültek előtérbe:
+A konkrét osztályok és függvények megtervezésekor az alábbi általános
+irányelvek érvényesültek:
 
 \begin{itemize}
-  \item \textbf{RAII-alapú erőforráskezelés}: a kernel által adott fájlleírók, illetve más erőforrások (pl. BPF programok) kezelése mindenhol RAII típusokkal történik (pl. \texttt{OwnedFd}), így a felszabadításról a destruktorok gondoskodnak.
-  \item \textbf{Kivételmentes hibakezelés}: a könyvtár minden publikus metódusa \texttt{std::expected}-et használ, így a hívó fél explicit módon kénytelen kezelni a hibákat, és egyértelműen látszik, hogy mely műveletek lehetnek sikertelenek.
-  \item \textbf{Típusbiztonság és olvashatóság}: a nyers \texttt{int} és \texttt{unsigned long} típusok helyett enumok, erős típusként értelmezett wraperek kerülnek használatra (pl. \texttt{LandlockAccess}), hogy a fordító lehetőleg minél több hibát már fordítási időben jelezhessen.
-  \item \textbf{Biztonságos alapértelmezések}: ahol lehetséges, a könyvtár olyan alapértelmezett konfigurációkat kínál (pl. \texttt{add\_defaults()}), amelyek a tipikus Linux környezetekre már eleve használható sandboxot biztosítanak, és csak finomhangolásra van szükség.
+  \item \emph{RAII-alapú erőforráskezelés}: a kernel által adott
+  fájlleírók és más erőforrások kezelése RAII típusokon keresztül történik.
+  Ez biztosítja, hogy az
+  erőforrások felszabadítása automatikusan, a megfelelő objektum élettartamához
+  kötötten történjen.
+
+  \item \emph{Kivételmentes hibakezelés}: a publikus műveletek
+  \code{std::expected}-alapú visszatérési értékeket használnak. Ez
+  egyértelművé teszi, hogy mely műveletek lehetnek sikertelenek, és a hívó
+  felet explicit hibakezelésre ösztönzi.
+
+  \item \emph{Típusbiztonság és olvashatóság}: ahol lehetséges, a nyers
+  típusok helyett
+  erősebben típusozott absztrakciók kerülnek használatra, például a
+  \code{LandlockAccess}. Ez csökkenti a hibás paraméterezés lehetőségét, és
+  olvashatóbbá teszi a kódot.
+
+  \item \emph{Biztonságos alapértelmezések}: a könyvtár olyan kiindulási
+  konfigurációkat kínál, amelyek
+  tipikus Linux környezetben használható alapot adnak a sandbox kialakításához,
+  miközben továbbra is lehetőséget biztosítanak az alkalmazás-specifikus
+  finomhangolásra.
 \end{itemize}
 
-Ezek az elvek együtt azt a célt szolgálják, hogy a Linux kernel komplex biztonsági mechanizmusai a mindennapi C++ fejlesztő számára is könnyebben elérhetővé váljanak. A következő fejezetben kerül sor az implementáció részletes bemutatására, konkrét kódrészletekkel, valamint a seccomp és Landlock integráció tényleges megvalósításával.
+Ezek az elvek együtt azt szolgálják, hogy a Linux kernel összetett biztonsági
+mechanizmusai a mindennapi C++ alkalmazásfejlesztésben is könnyebben
+használhatók legyenek.

@@ -1,0 +1,29 @@
+@startuml
+
+skinparam classAttributeIconSize 0
+skinparam shadowing false
+
+
+enum LandlockAccess {
+  None
+  Read
+  Write
+  Execute
+  ReadWrite
+  ReadExecute
+  WriteExecute
+  All
+}
+
+class LandlockRuleSet {
+  - ruleset_fd
+
+  + init()
+  + add_rule(fd, access)
+  + add_rule(path, access)
+  + apply()
+}
+
+LandlockRuleSet ..> LandlockAccess : uses
+
+@enduml

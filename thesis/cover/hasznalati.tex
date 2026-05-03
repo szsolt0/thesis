@@ -2,17 +2,30 @@
 
 \section*{CD Használati útmutató}
 
-Ennek a címe lehet például \textit{A mellékelt CD tartalma} vagy \textit{Adathordozó használati útmutató} is.
+A szakdolgozathoz mellékelt adathordozó tartalmazza a dolgozat PDF-változatát, a dolgozat LaTeX forráskódját, valamint a dolgozathoz kapcsolódó forráskódokat és dokumentációkat.
 
-Ez jellemzően csak egy fél-egy oldalas leírás.
-Arra szolgál, hogy ha valaki kézhez kapja a szakdolgozathoz tartozó CD-t, akkor tudja, hogy mi hol van rajta.
-Jellemzően elég csak felsorolni, hogy milyen jegyzékek vannak, és azokban mi található.
-Az elkészített programok telepítéséhez, futtatásához tartozó instrukciók kerülhetnek ide.
+Az adathordozó főbb jegyzékei és fájljai a következők:
 
-A CD lemezre mindenképpen rá kell tenni
 \begin{itemize}
-\item a dolgozatot egy \texttt{dolgozat.pdf} fájl formájában,
-\item a LaTeX forráskódját a dolgozatnak,
-\item az elkészített programot, fontosabb futási eredményeket (például ha kép a kimenet),
-\item egy útmutatót a CD használatához (ami lehet ez a fejezet külön PDF-be vagy MarkDown fájlként kimentve).
+    \item \path{dolgozat.pdf}: a szakdolgozat végleges, PDF formátumú változata.
+
+    \item \path{thesis/}: a szakdolgozat LaTeX forrásfájljai. Ebben a jegyzékben találhatók a dolgozat fejezetei, a hivatkozásokhoz szükséges fájlok, valamint a PDF előállításához használt egyéb LaTeX állományok.
+
+    \item \path{docs/}: a könyvtárhoz és a dolgozat témájához kapcsolódó dokumentációk. Ezek a fájlok a megvalósított megoldások, illetve a vizsgált technológiák megértését segítik.
+
+    \item \path{code/}: a szakdolgozathoz kapcsolódó programkódok.
+
+    \begin{itemize}
+        \item \path{code/examples/}: példaprogamok, amelyek bemutatják a könyvtár használatát.
+
+        \item \path{code/library/cpp}: a dolgozat keretében elkészített saját C++ könyvtár implementációja.
+    \end{itemize}
+
+    \item \path{README.md}: a projekt rövid leírása, a szakdolgozat témája, célkitűzései, valamint a repository felépítésének áttekintése.
 \end{itemize}
+
+A dolgozat témája az alkalmazásfejlesztői szintű erőforrás-izoláció vizsgálata Linux rendszeren, különös tekintettel a Landlock és a seccomp mechanizmusokra. A mellékelt forráskódok egy olyan saját C++ könyvtár megvalósítását tartalmazzák, amelynek célja ezen biztonsági mechanizmusok egyszerűbb és kényelmesebb használata alkalmazásfejlesztői szinten.
+
+A programkód fordításához és futtatásához a megfelelő aljegyzékben található útmutató, illetve a projekt \path{README.md} fájlja ad további információt. A C++ implementáció CMake alapú fordítási rendszert használ, a tesztek pedig a GoogleTest keretrendszerrel készültek.
+
+Az adathordozó tartalmának megtekintéséhez elegendő a fájlokat egy tetszőleges könyvtárba másolni. A dolgozat a \path{dolgozat.pdf} fájl megnyitásával olvasható, a forráskódok pedig a \path{code/} jegyzék alatt találhatók.

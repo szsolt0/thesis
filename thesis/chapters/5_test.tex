@@ -1,5 +1,84 @@
 \chapter{Tesztelés}
 
-A tesztek a \texttt{tests} jegyzékben vannak.
+A projekt tesztjei a \path{tests} jegyzékben találhatók. A teszteléshez a GoogleTest keretrendszert használtam, mert egyszerűen integrálható CMake alapú C++ projektekbe, és jól használható egységtesztek, valamint olyan speciális esetek vizsgálatára is, amikor egy folyamatnak szándékosan meg kell szakadnia. Ez utóbbi különösen fontos a seccomp tesztelésekor, mivel a tiltott rendszerhívások hatására a kernel a folyamatot megszakíthatja.
 
-\textbf{TODO:} megírni ezt a részt.
+A tesztek célja annak ellenőrzése, hogy a könyvtár fő biztonsági mechanizmusai, vagyis a Landlock alapú fájlrendszer-korlátozás és a seccomp alapú rendszerhívás-szűrés helyesen működnek-e. A tesztek nemcsak azt vizsgálják, hogy az inicializáló és beállító függvények sikeresen lefutnak-e, hanem azt is, hogy a beállított szabályok ténylegesen érvényesülnek-e.
+
+\section{Landlock tesztek}
+
+A Landlock tesztek a \code{LandlockRuleSet} osztály működését ellenőrzik. A tesztek első lépésként meghívják a \code{set\_\allowbreak no\_\allowbreak new\_\allowbreak privs()} függvényt. Erre azért van szükség, mert a Landlock és a seccomp használatánál is fontos, hogy a folyamat később ne szerezhessen új jogosultságokat. Ez csökkenti annak kockázatát, hogy egy korlátozott folyamat valamilyen módon megkerülje a rá alkalmazott biztonsági szabályokat.
+
+Az alap Landlock teszt azt vizsgálja, hogy létrehozható-e egy új szabálykészlet, hozzáadható-e egy olvasási szabály a \code{/etc} könyvtárra, majd alkalmazható-e a szabálykészlet:
+
+\begin{itemize}
+    \item a \code{set\_\allowbreak no\_\allowbreak new\_\allowbreak privs()} sikeresen lefut,
+    \item a \code{LandlockRuleSet::init()} sikeresen létrehoz egy szabálykészletet,
+    \item a \path{/etc} könyvtárra olvasási jogosultság adható,
+    \item a szabálykészlet alkalmazható az aktuális folyamatra.
+\end{itemize}
+
+Ez a teszt főként azt ellenőrzi, hogy az alapvető Landlock inicializáció és szabályalkalmazás működőképes-e.
+
+A második Landlock teszt már a jogosultságok tényleges érvényesülését is vizsgálja. A teszt létrehoz egy \path{test_folder} nevű könyvtárat, azon belül egy alkönyvtárat és fájlokat, valamint létrehoz egy külön \path{test_folder_secret} könyvtárat is. Ezután a Landlock szabályok csak a \path{/etc} könyvtár olvasását, illetve a \path{test_folder} könyvtár olvasását és írását engedélyezik.
+
+A szabályok alkalmazása után a teszt közvetlen rendszerhívás-burkolókon keresztül próbál fájlokat megnyitni. A \code{/etc/passwd} olvasása sikeres kell legyen, mert a \code{/etc} könyvtárra olvasási engedélyt kapott a folyamat. A \path{test_folder/a.txt} és a \path{test_folder/sub/a.txt} fájlok írásra és olvasásra is megnyithatók, mert a \path{test_folder} könyvtárra olvasási és írási jogosultság lett beállítva. Ezzel szemben a \path{test_folder_secret/secret.txt} megnyitásának sikertelennek kell lennie, mert erre a könyvtárra nem került engedélyező szabály.
+
+Ez a teszt tehát azt igazolja, hogy a Landlock szabályok ténylegesen korlátozzák is a fájlrendszerhez való hozzáférést.
+
+\section{Seccomp tesztek}
+
+A seccomp tesztek két fő részből állnak. Az első rész a könyvtárban megvalósított szigorított seccomp módot vizsgálja, a második pedig a szabályépítő, vagyis a \code{SeccompBuilder} működését.
+
+A \code{SeccompBetterStrict.StrictMode} teszt azt ellenőrzi, hogy a \code{seccomp\_\allowbreak better\_\allowbreak strict()} függvény sikeresen alkalmazható-e, és az engedélyezett rendszerhívások továbbra is működnek-e. A teszt először beállítja a \code{no\_\allowbreak new\_\allowbreak privs} állapotot, majd aktiválja a seccomp szűrőt. Ezután egyszerű írási műveleteket végez a \code{write} és \code{writev} rendszerhívások segítségével. Ezeknek sikeresen kell lefutniuk, mert a szigorított mód célja egy szűk, biztonságos működéshez szükséges rendszerhívás készlet engedélyezése.
+
+A \code{SeccompBetterStrict.After} teszt egy \code{mmap} rendszerhívást hajt végre seccomp korlátozás nélkül. Ez kontrolltesztként szolgál: megmutatja, hogy az \code{mmap} önmagában, seccomp szűrő nélkül végrehajtható.
+
+A \code{SeccompBetterStrict.Die} teszt ezzel szemben már azt ellenőrzi, hogy a tiltott rendszerhívás valóban megszakítja-e a folyamatot. A teszt beállítja a \code{no\_\allowbreak new\_\allowbreak privs} állapotot, aktiválja a \code{seccomp\_\allowbreak better\_\allowbreak strict()} szűrőt, majd meghívja az \code{mmap} rendszerhívást. Mivel ez a hívás nincs engedélyezve a szűrőben, a folyamatnak meg kell szakadnia. Ezt a GoogleTest \code{EXPECT\_\allowbreak DEATH} makrója vizsgálja. Ez különösen fontos teszt, mert bizonyítja, hogy a seccomp szűrő nemcsak sikeresen betöltődik, hanem a tiltott műveleteket ténylegesen meg is akadályozza.
+
+\section{SeccompBuilder tesztek}
+
+A \code{SeccompBuilder} tesztek a dinamikusan összeállítható seccomp szabályok működését ellenőrzik. A \code{SeccompBuilder.Build} teszt először létrehoz egy builder objektumot a \code{SeccompBuilder::init()} függvénnyel. Ezután hozzáad egy létező szabálycsoportot, az \code{io} nevű szabályt. Ennek sikeresnek kell lennie. A teszt ezután megpróbál hozzáadni egy nem létező szabályt is. Ennek sikertelennek kell lennie, mert a buildernek fel kell ismernie az érvénytelen szabályneveket.
+
+A teszt végül meghívja a \code{build()} függvényt, amely a hozzáadott szabályokból létrehozza a végleges seccomp szabályt. A teszt akkor sikeres, ha a szabály létrejön, és a hibás szabálynév nem kerül elfogadásra.
+
+A \code{SeccompBuilder.Apply} teszt hasonló felépítésű, de a létrehozott szabályt ténylegesen alkalmazza is. A builder inicializálása és az \code{io} szabály hozzáadása után a teszt ismét ellenőrzi, hogy egy nem létező szabály hozzáadása hibát eredményez. Ezután létrejön a végleges szabály, majd a \code{set\_\allowbreak no\_\allowbreak new\_\allowbreak privs()} meghívása után a szabály alkalmazásra kerül az aktuális folyamatra.
+
+Ez a teszt azt igazolja, hogy a \code{SeccompBuilder} által létrehozott szabály ténylegesen betölthető és alkalmazható is.
+
+\section{A tesztek értékelése}
+
+A tesztek lefedik a könyvtár legfontosabb működési részeit. A Landlock tesztek ellenőrzik a fájlrendszer-hozzáférések szabályozását, beleértve az engedélyezett és tiltott elérési utak viselkedését is. A seccomp tesztek ellenőrzik az engedélyezett rendszerhívások működését, valamint azt is, hogy egy tiltott rendszerhívás valóban a folyamat megszakítását eredményezi. A \code{SeccompBuilder} tesztek pedig azt vizsgálják, hogy a magasabb szintű szabályépítő interfész helyesen kezeli-e az érvényes és érvénytelen szabályokat.
+
+A tesztek futtatása a CMake által létrehozott build könyvtárból a következő paranccsal történik:
+
+\begin{verbatim}
+ctest --test-dir build
+\end{verbatim}
+
+A futtatás során mind a nyolc teszt sikeresen lefutott:
+
+\begin{verbatim}
+$ ctest --test-dir build
+Internal ctest changing into directory: [REDACTED]
+Test project [REDACTED]
+    Start 1: AdditionTest.Basic
+1/8 Test #1: AdditionTest.Basic ...............   Passed    0.00 sec
+    Start 2: SeccompBetterStrict.StrictMode
+2/8 Test #2: SeccompBetterStrict.StrictMode ...   Passed    0.00 sec
+    Start 3: SeccompBetterStrict.After
+3/8 Test #3: SeccompBetterStrict.After ........   Passed    0.00 sec
+    Start 4: SeccompBetterStrict.Die
+4/8 Test #4: SeccompBetterStrict.Die ..........   Passed    0.10 sec
+    Start 5: SeccompBuilder.Build
+5/8 Test #5: SeccompBuilder.Build .............   Passed    0.00 sec
+    Start 6: SeccompBuilder.Apply
+6/8 Test #6: SeccompBuilder.Apply .............   Passed    0.00 sec
+    Start 7: Landlock.Basic
+7/8 Test #7: Landlock.Basic ...................   Passed    0.00 sec
+    Start 8: Landlock.Allow
+8/8 Test #8: Landlock.Allow ...................   Passed    0.00 sec
+
+100% tests passed, 0 tests failed out of 8
+\end{verbatim}
+
+A sikeresen lefutó tesztek azt mutatják, hogy a könyvtár alapvető biztonsági funkciói működnek: a Landlock szabályok képesek korlátozni a fájlrendszer-hozzáférést, a seccomp szabályok képesek tiltani bizonyos rendszerhívásokat, a builder interfész pedig megfelelően állítja össze és alkalmazza a szabályokat.

@@ -1,0 +1,38 @@
+@startuml
+
+skinparam classAttributeIconSize 0
+skinparam shadowing false
+
+
+class SeccompBuilder {
+  - finished : bool
+
+  + init()
+  + init_no_defaults()
+  + allow(what)
+  + build(kill_entire_process)
+  + build_static(kill_entire_process)
+}
+
+class SeccompRule {
+  - view
+
+  + view()
+  + SeccompRule(other)
+  + operator=(other)
+  + ~SeccompRule()
+}
+
+class SeccompRuleView {
+  - filter
+
+  + apply()
+}
+
+SeccompBuilder ..> SeccompRule : builds
+SeccompBuilder ..> SeccompRuleView : builds static view
+SeccompRule *-- SeccompRuleView : owns view
+SeccompRuleView ..> SeccompRule : view of
+
+
+@enduml
