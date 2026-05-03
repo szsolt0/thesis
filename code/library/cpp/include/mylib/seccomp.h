@@ -102,6 +102,10 @@ class SeccompRule
 		return *this;
 	}
 
+	SeccompRuleView view() const noexcept {
+		return m_view;
+	}
+
 	~SeccompRule() noexcept
 	{
 		destroy();

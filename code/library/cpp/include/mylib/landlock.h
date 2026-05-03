@@ -31,8 +31,16 @@ enum class LandlockAccess: __u64
 {
 	None = LANDLOCK_ACCESS_FS_EXECUTE,
 
-	Write   = LANDLOCK_ACCESS_FS_WRITE_FILE | LANDLOCK_ACCESS_FS_TRUNCATE,
-	Read    = LANDLOCK_ACCESS_FS_READ_FILE,
+	Write   = LANDLOCK_ACCESS_FS_WRITE_FILE
+	        | LANDLOCK_ACCESS_FS_TRUNCATE
+	        | LANDLOCK_ACCESS_FS_MAKE_BLOCK
+			| LANDLOCK_ACCESS_FS_MAKE_CHAR
+			| LANDLOCK_ACCESS_FS_MAKE_DIR
+			| LANDLOCK_ACCESS_FS_MAKE_FIFO
+			| LANDLOCK_ACCESS_FS_MAKE_REG
+			| LANDLOCK_ACCESS_FS_MAKE_SOCK
+			| LANDLOCK_ACCESS_FS_MAKE_SYM,
+	Read    = LANDLOCK_ACCESS_FS_READ_FILE | LANDLOCK_ACCESS_FS_READ_DIR,
 	Execute = LANDLOCK_ACCESS_FS_EXECUTE,
 
 	ReadWrite    = Read | Write,
@@ -68,12 +76,7 @@ class LandlockRuleSet
 	[[nodiscard]] static std::expected<LandlockRuleSet, int> init() noexcept
 	{
 		struct landlock_ruleset_attr ruleset_attr {};
-		ruleset_attr.handled_access_fs = 0
-			| LANDLOCK_ACCESS_FS_EXECUTE
-			| LANDLOCK_ACCESS_FS_WRITE_FILE
-			| LANDLOCK_ACCESS_FS_READ_FILE
-			| LANDLOCK_ACCESS_FS_TRUNCATE
-		;
+		ruleset_attr.handled_access_fs = static_cast<__u64>(LandlockAccess::All);
 
 		const int ruleset_fd = detail::landlock_create_ruleset(&ruleset_attr, sizeof(ruleset_attr), 0);
 

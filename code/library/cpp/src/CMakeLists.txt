@@ -1,6 +1,6 @@
 add_library(mylib
     landlock.cpp
-	seccomp.cpp
+    seccomp.cpp
 )
 
 target_include_directories(mylib PUBLIC

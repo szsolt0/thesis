@@ -17,10 +17,13 @@ TEST(Landlock, Basic) {
 }
 
 TEST(Landlock, Allow) {
-	mkdir("test_folder", 0666);
-	mkdir("test_folder/sub", 0666);
+	mkdir("test_folder", 0777);
+	mkdir("test_folder/sub", 0777);
 	creat("test_folder/a.txt", 0666);
 	creat("test_folder/sub/a.txt", 0666);
+
+	mkdir("test_folder_secret", 0777);
+	creat("test_folder_secret/secret.txt", 0666);
 
 	EXPECT_TRUE(set_no_new_privs());
 
@@ -40,6 +43,6 @@ TEST(Landlock, Allow) {
 	auto fd3 = detail::sys_open("test_folder/sub/a.txt", O_RDWR|O_CLOEXEC, 0);
 	EXPECT_TRUE(fd3 > 0);
 
-	auto fd4 = detail::sys_open("/dev", O_PATH|O_CLOEXEC, 0);
+	auto fd4 = detail::sys_open("test_folder_secret/secret.txt", O_RDONLY|O_CLOEXEC, 0);
 	EXPECT_FALSE(fd4 > 0);
 }
