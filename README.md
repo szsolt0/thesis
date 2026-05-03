@@ -34,7 +34,4 @@ This repository contains both the thesis and the supporting code:
 - `docs/` – Documentation related to the library and thesis.
 - `code/` – All related code.
     - `examples/` – Various example programs.
-    - `library/` – Implementation of the custom library.
-        - `cpp/` – C++ version.
-        - `rs/` – Rust version.
-        - `common/` – Shared files used by both versions (e.g., list of syscall categories).
+    - `library/cpp` – Implementation of the custom library.
