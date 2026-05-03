@@ -260,6 +260,7 @@ std::expected<SeccompBuilder, int> SeccompBuilder::init() noexcept
 
 	TRY_EXPECTED(builder.add_preample());
 	TRY_EXPECTED(builder.allow("basic"));
+	TRY_EXPECTED(builder.allow("sandbox"));
 
 	return builder;
 }
