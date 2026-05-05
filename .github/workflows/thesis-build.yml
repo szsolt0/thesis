@@ -2,13 +2,15 @@ name: Build Thesis PDF
 
 on:
   push:
+    branches:
+      - master
     paths:
-      - "thesis/**"                 # only when thesis/ changes
+      - "thesis/**"
       - ".github/workflows/thesis-build.yml"
-  workflow_dispatch:                # allow manual runs
+  workflow_dispatch:
 
 permissions:
-  contents: write                   # needed to create releases
+  contents: write
 
 jobs:
   build:
@@ -25,18 +27,23 @@ jobs:
           root_file: dolgozat.tex
           args: -pdf -file-line-error -halt-on-error -interaction=nonstopmode
 
-
       - name: Upload PDF as artifact
         uses: actions/upload-artifact@v4
         with:
           name: thesis-pdf
           path: thesis/dolgozat.pdf
 
+      - name: Delete old thesis release
+        run: |
+          gh release delete thesis --cleanup-tag --yes || true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Create GitHub Release with PDF
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: thesis-${{ github.sha }}
-          name: "Thesis build – ${{ github.sha }}"
+          tag_name: thesis
+          name: thesis
           files: thesis/dolgozat.pdf
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
