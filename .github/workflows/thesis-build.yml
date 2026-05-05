@@ -35,15 +35,15 @@ jobs:
 
       - name: Delete old thesis release
         run: |
-          gh release delete thesis --cleanup-tag --yes || true
+          gh release delete thesis-release --cleanup-tag --yes || true
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Create GitHub Release with PDF
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: thesis
-          name: thesis
+          tag_name: thesis-release
+          name: Thesis
           files: thesis/dolgozat.pdf
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
