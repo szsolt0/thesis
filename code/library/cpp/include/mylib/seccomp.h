@@ -6,6 +6,7 @@
 #include <string_view>
 #include <span>
 #include <vector>
+#include <set>
 
 #include <linux/seccomp.h>
 #include <linux/filter.h>
@@ -20,7 +21,10 @@ namespace detail {
 // list of filters by category
 extern const std::span<std::pair<std::string_view, sock_fprog>> filter_categories;
 
+struct SyscallEntry {};
+
 } // namespace detail
+
 std::expected<void, int> seccomp_better_strict() noexcept;
 
 class SeccompBuilder;
@@ -115,13 +119,17 @@ class SeccompRule
 class SeccompBuilder
 {
 	std::vector<sock_filter> m_filter;
+	std::set<long> m_syscalls;
 	bool finished = false;
 
 	/*__attribute__((always_inline))
 	SeccompBuilder(int const fd) noexcept : m_fd{fd} {}*/
 
 	std::expected<void, int> add_preample();
-	std::expected<void, int> append(sock_fprog const* prog);
+	std::expected<void, int> append(std::span<sock_filter> filters);
+	void generate_filter_from_syscalls();
+	std::expected<void, int> allow_syscall(long nr);
+	std::expected<void, int> allow_syscall_range(long min, long max);
 
 	public:
 

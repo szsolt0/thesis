@@ -12,8 +12,10 @@
 #include <cstring>
 
 #include <span>
+#include <array>
 #include <string_view>
 #include <limits>
+#include <expected>
 
 #if !defined __x86_64__
 #error "this is for x86_64 only"
@@ -52,146 +54,225 @@ namespace mylib {
 // put at end of rules to kill thread
 #define END_KILL_THREAD() BPF_STMT(BPF_RET + BPF_K, SECCOMP_RET_KILL_THREAD)
 
-// better strict mode filter
-static constexpr sock_filter better_strict_filter[] = {
-	PREAMPLE(),
-	// syscall order available here: https://filippo.io/linux-syscall-table/
 
-	// read/write
-	ALLOW_SYSCALL_RANGE(0, 1),
+// === syscall categories ===
 
-	// stat and close
-	ALLOW_SYSCALL_RANGE(3, 6),
-
-	// rt_sigreturn
-	ALLOW_SYSCALL(15),
-
-	// pread, pwrite, readv, writev
-	ALLOW_SYSCALL_RANGE(17, 20),
-
-	// sendfile
-	ALLOW_SYSCALL(40),
-
-	// close_range, but only if 3rd arg is 0
-	BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K, __NR_close_range, 0, 3),
-	BPF_STMT(BPF_LD + BPF_W + BPF_ABS, offsetof(struct seccomp_data, args[2])),
-	BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K, 0, 0, 1),
-	BPF_STMT(BPF_RET + BPF_K, SECCOMP_RET_ALLOW),
-	BPF_STMT(BPF_LD + BPF_W + BPF_ABS, offsetof(struct seccomp_data, nr)),
-
-	// exit
-	ALLOW_SYSCALL(60),
-
-	// exit_group
-	ALLOW_SYSCALL(231),
-
-	// strict seccomp always kills the entire process
-	END_KILL_PROCESS(),
-};
-
-// better strict mode program
-static constexpr sock_fprog better_strict_prog = {
-	.len = std::size(better_strict_filter),
-	.filter = const_cast<sock_filter*>(better_strict_filter),
-};
-
-std::expected<void, int> seccomp_better_strict() noexcept
+struct SyscallCategory
 {
-	int const ret = detail::sys_seccomp(SECCOMP_SET_MODE_FILTER, 0, const_cast<sock_fprog*>(&better_strict_prog));
-
-	if (ret != 0) {
-		return std::unexpected {-ret};
-	}
-
-	return {};
-}
-
-
-// filter for I/O syscalls
-static constexpr sock_filter io_filter[] = {
-	// read/write
-	ALLOW_SYSCALL_RANGE(0, 1),
-
-	// pread, pwrite, readv, writev
-	ALLOW_SYSCALL_RANGE(17, 20),
-
-	// sendfile
-	ALLOW_SYSCALL(40),
+	std::string_view name;
+	std::span<const long> nrs;
+	std::span<const std::string_view> inherit = {};
 };
 
-// TODO: maybe create a template helper for this?
-static constexpr sock_fprog io_prog = {
-	.len = std::size(io_filter),
-	.filter = const_cast<sock_filter*>(io_filter),
-};
+static constexpr auto cat_sandbox = std::to_array<long>({
+	SYS_landlock_create_ruleset,
+	SYS_landlock_add_rule,
+	SYS_landlock_restrict_self,
+	SYS_seccomp,
+});
 
-// filter for sandbox related calls
-static constexpr sock_filter sandbox_filter[] = {
-	// landlock
-	ALLOW_SYSCALL_RANGE(444, 446),
+static constexpr auto cat_basic = std::to_array<long>({
+    SYS_arch_prctl,
+    SYS_brk,
+    SYS_clock_getres,
+    SYS_clock_gettime,
+    SYS_clock_nanosleep,
+    SYS_execve,
+    SYS_exit,
+    SYS_exit_group,
+    SYS_futex,
+    SYS_futex_waitv,
+    SYS_get_robust_list,
+    SYS_get_thread_area,
+    SYS_getegid,
+    SYS_geteuid,
+    SYS_getgid,
+    SYS_getgroups,
+    SYS_getpgid,
+    SYS_getpgrp,
+    SYS_getpid,
+    SYS_getppid,
+    SYS_getrandom,
+    SYS_getresgid,
+    SYS_getresuid,
+    SYS_getrlimit,
+    SYS_getsid,
+    SYS_gettid,
+    SYS_gettimeofday,
+    SYS_getuid,
+    SYS_lsm_get_self_attr,
+    SYS_lsm_list_modules,
+    SYS_membarrier,
+    SYS_mmap,
+    SYS_mprotect,
+    SYS_mseal,
+    SYS_munmap,
+    SYS_nanosleep,
+    SYS_pause,
+    SYS_prlimit64,
+    SYS_restart_syscall,
+    SYS_rseq,
+    SYS_rt_sigreturn,
+    SYS_sched_getaffinity,
+    SYS_sched_yield,
+    SYS_set_robust_list,
+    SYS_set_thread_area,
+    SYS_set_tid_address,
+    SYS_time,
+    SYS_uretprobe,
+});
 
-	// seccomp
-	ALLOW_SYSCALL(SYS_seccomp),
-};
+static constexpr auto cat_basic_inherit = std::to_array<std::string_view>({
+	"sandbox",
+});
 
-static constexpr sock_fprog sandbox_prog = {
-	.len = std::size(sandbox_filter),
-	.filter = const_cast<sock_filter*>(sandbox_filter),
-};
+static constexpr auto cat_network_io = std::to_array<long>({
+    SYS_accept,
+    SYS_accept4,
+    SYS_bind,
+    SYS_connect,
+    SYS_getpeername,
+    SYS_getsockname,
+    SYS_getsockopt,
+    SYS_listen,
+    SYS_recvfrom,
+    SYS_recvmmsg,
+    SYS_recvmsg,
+    SYS_sendmmsg,
+    SYS_sendmsg,
+    SYS_sendto,
+    SYS_setsockopt,
+    SYS_shutdown,
+    SYS_socket,
+    SYS_socketpair,
+});
 
-// filter for basic calls, these are enabled by default
-static constexpr sock_filter basic_filter[] = {
-	// memory
-	ALLOW_SYSCALL_RANGE(9, 11),
+static constexpr auto cat_file_system = std::to_array<long>({
+    SYS_access,
+    SYS_chdir,
+    SYS_chmod,
+    SYS_close,
+    SYS_creat,
+    SYS_faccessat,
+    SYS_faccessat2,
+    SYS_fallocate,
+    SYS_fchdir,
+    SYS_fchmod,
+    SYS_fchmodat,
+    SYS_fchmodat2,
+    SYS_fcntl,
+    SYS_fgetxattr,
+    SYS_flistxattr,
+    SYS_fremovexattr,
+    SYS_fsetxattr,
+    SYS_fstat,
+    SYS_fstatfs,
+    SYS_ftruncate,
+    SYS_futimesat,
+    SYS_getcwd,
+    SYS_getdents,
+    SYS_getdents64,
+    SYS_getxattr,
+    SYS_getxattrat,
+    SYS_inotify_add_watch,
+    SYS_inotify_init,
+    SYS_inotify_init1,
+    SYS_inotify_rm_watch,
+    SYS_lgetxattr,
+    SYS_link,
+    SYS_linkat,
+    SYS_listmount,
+    SYS_listxattr,
+    SYS_listxattrat,
+    SYS_llistxattr,
+    SYS_lremovexattr,
+    SYS_lsetxattr,
+    SYS_lstat,
+    SYS_mkdir,
+    SYS_mkdirat,
+    SYS_mknod,
+    SYS_mknodat,
+    SYS_newfstatat,
+    SYS_open,
+    SYS_open_tree,
+    SYS_openat,
+    SYS_openat2,
+    SYS_readlink,
+    SYS_readlinkat,
+    SYS_removexattr,
+    SYS_removexattrat,
+    SYS_rename,
+    SYS_renameat,
+    SYS_renameat2,
+    SYS_rmdir,
+    SYS_setxattr,
+    SYS_setxattrat,
+    SYS_stat,
+    SYS_statfs,
+    SYS_statmount,
+    SYS_statx,
+    SYS_symlink,
+    SYS_symlinkat,
+    SYS_truncate,
+    SYS_unlink,
+    SYS_unlinkat,
+    SYS_utime,
+    SYS_utimensat,
+    SYS_utimes,
+});
 
-	ALLOW_SYSCALL(__NR_rt_sigreturn),
+static constexpr auto cat_io = std::to_array<long>({
+    SYS_close,
+    SYS_close_range,
+    SYS_dup,
+    SYS_dup2,
+    SYS_dup3,
+    SYS_lseek,
+    SYS_pread64,
+    SYS_preadv,
+    SYS_preadv2,
+    SYS_pwrite64,
+    SYS_pwritev,
+    SYS_pwritev2,
+    SYS_read,
+    SYS_readv,
+    SYS_write,
+    SYS_writev,
+});
 
-	// sched_yield, memory related
-	ALLOW_SYSCALL_RANGE(24, 28),
-
-	// pause, nanosleep
-	ALLOW_SYSCALL_RANGE(34, 35),
-
-	ALLOW_SYSCALL(__NR_getpgid),
-	ALLOW_SYSCALL(__NR_exit),
-	ALLOW_SYSCALL(__NR_exit_group),
-
-	// get*
-	ALLOW_SYSCALL_RANGE(96, 100),
-};
-
-static constexpr sock_fprog basic_prog = {
-	.len = std::size(basic_filter),
-	.filter = const_cast<sock_filter*>(basic_filter),
-};
-
-#define ENTRY(name, prog) std::pair<std::string_view, sock_fprog> {name, prog}
-
-constexpr std::pair<std::string_view, sock_fprog> filter_categories_arr[] = {
-	ENTRY("basic", basic_prog),
-	ENTRY("io", io_prog),
-	ENTRY("sandbox", sandbox_prog),
-};
+static constexpr auto cat_list = std::to_array<SyscallCategory>({
+	{"sandbox", cat_sandbox},
+	{"basic", cat_basic, cat_basic_inherit},
+	{"network_io", cat_network_io},
+	{"file_system", cat_file_system},
+	{"io", cat_io},
+});
 
 
 // === builder ===
 
-std::expected<void, int> SeccompBuilder::append(sock_fprog const* const prog)
+std::expected<void, int> SeccompBuilder::append(std::span<sock_filter> filters)
 {
-	//auto const full_size = sizeof(prog->filter) * prog->len;
-	this->m_filter.insert(this->m_filter.end(), prog->filter, prog->filter + prog->len);
+	m_filter.append_range(filters);
 	return {};
+}
+
+std::expected<void, int> SeccompBuilder::allow_syscall(long nr)
+{
+	std::array<sock_filter, 2> filters = {{ALLOW_SYSCALL(nr)}};
+	return append(filters);
+}
+
+std::expected<void, int> SeccompBuilder::allow_syscall_range(long min, long max)
+{
+	std::array<sock_filter, 3> filters = {{ALLOW_SYSCALL_RANGE(min, max)}};
+	return append(filters);
 }
 
 std::expected<void, int> SeccompBuilder::add_preample()
 {
-	constexpr sock_filter preample[] = {PREAMPLE()};
-	const sock_fprog premple_prog = {
-		.len = std::size(preample),
-		.filter = const_cast<sock_filter*>(preample),
-	};
-
-	return append(&premple_prog);
+	std::array<sock_filter, 4> filters = {{PREAMPLE()}};
+	return append(filters);
 }
 
 std::expected<void, int> SeccompBuilder::allow(std::string_view what) noexcept
@@ -200,52 +281,112 @@ std::expected<void, int> SeccompBuilder::allow(std::string_view what) noexcept
 		return std::unexpected {EALREADY};
 	}
 
-	for (auto const& [name, prog] : filter_categories_arr) {
-		if (name == what) {
-			return append(&prog);
+	for (auto const& cat : cat_list) {
+		if (cat.name == what) {
+			m_syscalls.insert_range(cat.nrs);
+
+			for (auto const& inherit : cat.inherit) {
+				allow(inherit);
+			}
+
+			return {};
 		}
 	}
 
 	return std::unexpected {ENOENT};
 }
 
-std::expected<SeccompRuleView, int> SeccompBuilder::build_static(bool const kill_entire_process) noexcept
+void SeccompBuilder::generate_filter_from_syscalls()
 {
-	if (!finished) {
-		if (kill_entire_process) {
-			m_filter.push_back(END_KILL_PROCESS());
-		} else {
-			m_filter.push_back(END_KILL_THREAD());
-		}
+    if (m_syscalls.empty()) {
+        return;
+    }
 
-		finished = true;
-		m_filter.shrink_to_fit();
+    auto it = m_syscalls.begin();
 
-		if (m_filter.size() > std::numeric_limits<unsigned short>::max()) {
-			return std::unexpected {E2BIG};
-		}
-	}
+    long range_start = *it;
+    long previous = *it;
+    ++it;
 
-	auto const len_in_bytes = m_filter.size() * sizeof(m_filter[0]);
-	auto const mem_ptr = static_cast<sock_filter*>(detail::sys_mmap(nullptr, len_in_bytes, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS, -1, 0));
-	auto const mem_ptr_as_num = std::bit_cast<std::intptr_t>(mem_ptr);
+    auto flush_range = [&] {
+        if (range_start == previous) {
+            allow_syscall(range_start);
+        } else {
+            allow_syscall_range(range_start, previous);
+        }
+    };
 
-	// raw mmap syscall signals error this way
-	if (is_between(mem_ptr_as_num, -4095, -1)) [[unlikely]] {
-		return std::unexpected {-static_cast<int>(mem_ptr_as_num)};
-	}
+    for (; it != m_syscalls.end(); ++it) {
+        long current = *it;
 
-	std::memcpy(mem_ptr, m_filter.data(), len_in_bytes);
+        if (current == previous + 1) {
+            previous = current;
+            continue;
+        }
 
-	// prevent write access
-	detail::sys_mprotect(mem_ptr, len_in_bytes, PROT_READ);
+        flush_range();
 
-	const sock_fprog prog = {
-		.len = m_filter.size(),
-		.filter = mem_ptr,
-	};
+        range_start = current;
+        previous = current;
+    }
 
-	return {SeccompRuleView {prog}};
+    flush_range();
+}
+
+std::expected<SeccompRuleView, int>
+SeccompBuilder::build_static(bool const kill_entire_process) noexcept
+{
+    if (!finished) {
+        generate_filter_from_syscalls();
+
+        if (kill_entire_process) {
+            m_filter.push_back(END_KILL_PROCESS());
+        } else {
+            m_filter.push_back(END_KILL_THREAD());
+        }
+
+        finished = true;
+        m_filter.shrink_to_fit();
+
+        if (m_filter.size() > std::numeric_limits<unsigned short>::max()) {
+            return std::unexpected {E2BIG};
+        }
+    }
+
+    auto const len_in_bytes = m_filter.size() * sizeof(m_filter[0]);
+
+    auto const mem_ptr = static_cast<sock_filter*>(
+        detail::sys_mmap(
+            nullptr,
+            len_in_bytes,
+            PROT_READ | PROT_WRITE,
+            MAP_PRIVATE | MAP_ANONYMOUS,
+            -1,
+            0
+        )
+    );
+
+    auto const mem_ptr_as_num = std::bit_cast<std::intptr_t>(mem_ptr);
+
+    if (is_between(mem_ptr_as_num, -4095, -1)) [[unlikely]] {
+        return std::unexpected {-static_cast<int>(mem_ptr_as_num)};
+    }
+
+    std::memcpy(mem_ptr, m_filter.data(), len_in_bytes);
+
+    auto const mprotect_ret =
+        detail::sys_mprotect(mem_ptr, len_in_bytes, PROT_READ);
+
+    if (mprotect_ret < 0) [[unlikely]] {
+        return std::unexpected {-static_cast<int>(mprotect_ret)};
+    }
+
+    const sock_fprog prog = {
+        .len = static_cast<unsigned short>(m_filter.size()),
+        .filter = mem_ptr,
+    };
+
+    return SeccompRuleView {prog};
 }
 
 std::expected<SeccompRule, int> SeccompBuilder::build(bool const kill_entire_process) noexcept
@@ -260,7 +401,6 @@ std::expected<SeccompBuilder, int> SeccompBuilder::init() noexcept
 
 	TRY_EXPECTED(builder.add_preample());
 	TRY_EXPECTED(builder.allow("basic"));
-	TRY_EXPECTED(builder.allow("sandbox"));
 
 	return builder;
 }
