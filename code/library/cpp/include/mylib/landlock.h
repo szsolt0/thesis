@@ -29,8 +29,6 @@ namespace mylib
 
 enum class LandlockAccess: __u64
 {
-	None = LANDLOCK_ACCESS_FS_EXECUTE,
-
 	Write   = LANDLOCK_ACCESS_FS_WRITE_FILE
 	        | LANDLOCK_ACCESS_FS_TRUNCATE
 	        | LANDLOCK_ACCESS_FS_MAKE_BLOCK
@@ -51,8 +49,29 @@ enum class LandlockAccess: __u64
 };
 
 namespace detail {
-	extern const std::span<const std::pair<char const*, LandlockAccess>> landlock_default_paths;
-}
+extern const std::span<const std::pair<char const*, LandlockAccess>> landlock_default_paths;
+
+static constexpr __u64 file_only_access =
+    LANDLOCK_ACCESS_FS_EXECUTE |
+    LANDLOCK_ACCESS_FS_WRITE_FILE |
+    LANDLOCK_ACCESS_FS_READ_FILE |
+    LANDLOCK_ACCESS_FS_TRUNCATE;
+
+static constexpr __u64 dir_allowed_access =
+    LANDLOCK_ACCESS_FS_EXECUTE |
+    LANDLOCK_ACCESS_FS_WRITE_FILE |
+    LANDLOCK_ACCESS_FS_READ_FILE |
+    LANDLOCK_ACCESS_FS_READ_DIR |
+    LANDLOCK_ACCESS_FS_MAKE_CHAR |
+    LANDLOCK_ACCESS_FS_MAKE_DIR |
+    LANDLOCK_ACCESS_FS_MAKE_REG |
+    LANDLOCK_ACCESS_FS_MAKE_SOCK |
+    LANDLOCK_ACCESS_FS_MAKE_FIFO |
+    LANDLOCK_ACCESS_FS_MAKE_BLOCK |
+    LANDLOCK_ACCESS_FS_MAKE_SYM |
+    LANDLOCK_ACCESS_FS_TRUNCATE;
+
+} // namespace detail
 
 class LandlockRuleSet
 {
@@ -67,8 +86,10 @@ class LandlockRuleSet
 	{
 		for (auto const& [path, access] : detail::landlock_default_paths) {
 			auto const fd = TRY_EXPECTED(detail::OwnedFd::openat(AT_FDCWD, path, O_PATH|O_CLOEXEC, 0));
-			return add_rule(fd, access);
+			TRY_EXPECTED(add_rule(fd, access));
 		}
+
+		return {};
 	}
 
 	public:
@@ -84,17 +105,44 @@ class LandlockRuleSet
 			return std::unexpected {-ruleset_fd};
 		}
 
-		return LandlockRuleSet {ruleset_fd};
+		LandlockRuleSet self {ruleset_fd};
+		TRY_EXPECTED(self.add_defaults());
+		return self;
 	}
 
-	[[nodiscard]] std::expected<void, int> add_rule(int fd, LandlockAccess access) noexcept
+	[[nodiscard]] std::expected<void, int>
+	add_rule(int fd, LandlockAccess access) noexcept
 	{
-		landlock_path_beneath_attr attr {};
-		attr.allowed_access = static_cast<__u64>(access);
-		attr.parent_fd = fd;
-		const int ret = detail::landlock_add_rule(m_ruleset_fd, LANDLOCK_RULE_PATH_BENEATH, &attr, 0);
+		struct stat st {};
 
-		if (ret != 0) {
+		if (fstat(fd, &st) < 0) {
+			return std::unexpected {errno};
+		}
+
+		__u64 allowed = static_cast<__u64>(access);
+
+		if (S_ISDIR(st.st_mode)) {
+			allowed &= detail::dir_allowed_access;
+		} else {
+			allowed &= detail::file_only_access;
+		}
+
+		if (allowed == 0) {
+			return std::unexpected {ENOMSG};
+		}
+
+		landlock_path_beneath_attr attr {};
+		attr.allowed_access = allowed;
+		attr.parent_fd = fd;
+
+		const int ret = detail::landlock_add_rule(
+			m_ruleset_fd,
+			LANDLOCK_RULE_PATH_BENEATH,
+			&attr,
+			0
+		);
+
+		if (ret < 0) {
 			return std::unexpected {-ret};
 		}
 
