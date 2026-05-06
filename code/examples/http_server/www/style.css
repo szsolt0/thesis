@@ -1,0 +1,43 @@
+:root {
+    font-family: system-ui, sans-serif;
+    color: #222;
+    background: #f5f5f5;
+}
+
+body {
+    max-width: 720px;
+    margin: 4rem auto;
+    padding: 0 1.5rem;
+    line-height: 1.6;
+}
+
+main {
+    background: white;
+    padding: 2rem;
+    border-radius: 12px;
+    box-shadow: 0 8px 24px rgb(0 0 0 / 0.08);
+}
+
+h1 {
+    margin-top: 0;
+    font-size: 2rem;
+}
+
+p {
+    margin-bottom: 1rem;
+}
+
+a {
+    color: #0057b8;
+    text-decoration: none;
+}
+
+a:hover {
+    text-decoration: underline;
+}
+
+code {
+    background: #eee;
+    padding: 0.15rem 0.35rem;
+    border-radius: 4px;
+}
