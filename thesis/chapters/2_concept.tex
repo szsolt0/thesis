@@ -202,24 +202,30 @@ bemutatott könyvtár ezt a rést igyekszik betölteni.
 Az eddig bemutatott megoldások és technológiák alapján megfogalmazhatók azok a
 fő követelmények, amelyek a tervezendő könyvtár koncepcióját meghatározzák:
 
-\begin{itemize}
-  \item \textbf{Fejlesztő-barát API:} hasonlóan az OpenBSD pledge /
-        unveil pároshoz, a könyvtárnak néhány jól érthető, magas
-        szintű primitivet kell kínálnia, amelyek mögött a bonyolult kernel-
-        mechanizmusok elrejthetők.
-  \item \textbf{Moduláris felépítés:} a rendszerhívás-szintű (seccomp)
-        és a fájlrendszer-szintű (Landlock) korlátozást logikailag
-        külön, de összehangolható módon kell kezelni.
-  \item \textbf{Modern C++ gyakorlatok:} RAII, \code{std::\allowbreak expected}-alapú
-        hibakezelés, erős típusosság, kivételmentes működés, átlátható
-        erőforrás-életciklusok.
-  \item \textbf{Biztonságos alapértelmezések:} ésszerű default konfigurációk
-        (pl.\ alapértelmezett Landlock-útvonalak) biztosítása, hogy egy minimális
-        beállítással is értelmes védelmi szint érhető legyen el.
-  \item \textbf{Kombinálhatóság:} a seccomp és Landlock mechanizmusok olyan
-        módon való használata, hogy egymást erősítve, többrétegű védelmet
-        jelentsenek egy támadóval szemben.
-\end{itemize}
+\begin{description}
+  \item[Fejlesztőbarát API]
+  Hasonlóan az OpenBSD pledge / unveil pároshoz, a könyvtárnak
+  néhány jól érthető, magas szintű primitívet kell kínálnia, amelyek mögött
+  a bonyolult kernelmechanizmusok elrejthetők.
+
+  \item[Moduláris felépítés]
+  A rendszerhívás-szintű, seccomp alapú és a fájlrendszer-szintű, Landlock
+  alapú korlátozást logikailag külön, de összehangolható módon kell kezelni.
+
+  \item[Modern C++ gyakorlatok]
+  A könyvtár RAII-alapú erőforráskezelést, \code{std::\allowbreak expected}-alapú
+  hibakezelést, erős típusosságot, kivételmentes működést és átlátható
+  erőforrás-életciklusokat használ.
+
+  \item[Biztonságos alapértelmezések]
+  A könyvtár ésszerű alapértelmezett konfigurációkat kínál, például
+  alapértelmezett Landlock-útvonalakat, hogy minimális beállítással is
+  értelmezhető védelmi szint legyen elérhető.
+
+  \item[Kombinálhatóság]
+  A seccomp és a Landlock mechanizmusok olyan módon használhatók együtt, hogy
+  egymást kiegészítve, többrétegű védelmet biztosítsanak egy támadóval szemben.
+\end{description}
 
 E követelményekhez kapcsolódóan a dolgozat több gyakorlati kutatási kérdésre is
 igyekszik választ adni, például:

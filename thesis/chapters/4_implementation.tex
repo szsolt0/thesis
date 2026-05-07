@@ -34,12 +34,69 @@ többnyire követik a megfelelő Linux rendszerhívások konvencióit. A libc
 függvényekkel való névütközés elkerülése érdekében ezek a függvények
 \code{sys\_\allowbreak } prefixet kapnak. Például a \code{write} rendszerhíváshoz
 tartozó wrapper neve \code{sys\_\allowbreak write}.
-
 A tényleges rendszerhívások végrehajtását a \code{raw\_\allowbreak syscall0},
 \ldots, \code{raw\_\allowbreak syscall6}, valamint az \code{exit\_\allowbreak group}
 függvények valósítják meg. Ezek a függvények architektúra-specifikus, GCC/Clang
 által támogatott kiterjesztett inline assemblyt használnak, és közvetlenül a
-Linux rendszerhívási interfészt hívják meg.
+Linux rendszerhívási interfészt hívják meg. Egy ilyen nyers rendszerhívás-wrapper
+példája látható \aref{lst:raw-syscall3}. kódrészletben.
+
+\begin{lstlisting}[float, language=C++, caption={Háromargumentumos nyers rendszerhívás-wrapper}, label={lst:raw-syscall3}]
+template <typename R, typename A1, typename A2, typename A3>
+static inline __attribute__((always_inline))
+R raw_syscall3(const long nr, const A1 a1, const A2 a2, const A3 a3) noexcept
+{
+    register R ret __asm__("rax");
+    const register auto arg1 __asm__("rdi") = a1;
+    const register auto arg2 __asm__("rsi") = a2;
+    const register auto arg3 __asm__("rdx") = a3;
+
+    __asm__ volatile (
+        "syscall"
+        : "=r"(ret)
+        : "0"(nr), "r"(arg1), "r"(arg2), "r"(arg3)
+        : "rcx", "r11", "memory"
+    );
+
+    return ret;
+}
+\end{lstlisting}
+
+A \code{raw\_\allowbreak syscall3} függvény sablonosított formában valósul meg,
+így a visszatérési érték és az argumentumok típusa a konkrét wrapper
+függvényekhez igazítható. Az x86-64 Linux rendszerhívási konvenció szerint a
+rendszerhívás sorszáma a \code{rax} regiszterbe, az első három argumentum pedig
+rendre a \code{rdi}, \code{rsi}, és \code{rdx} regiszterekbe kerül. A visszatérési
+érték szintén a \code{rax} regiszteren keresztül érkezik vissza.
+
+Az inline assembly blokkban a \code{syscall} utasítás hajtja végre a tényleges
+átlépést a kernel felé. A clobber listában szereplő \code{rcx} és \code{r11}
+regisztereket a \code{syscall} utasítás módosíthatja, ezért ezeket explicit
+módon meg kell adni. A \code{memory} clobber azt jelzi a fordító számára, hogy az
+utasításnak memóriára vonatkozó mellékhatásai lehetnek, ezért a környező
+memóriaműveletek nem rendezhetők át tetszőlegesen.
+
+A nyers rendszerhívás-wrapper függvényekre épülnek a könyvtár magasabb szintű
+\code{sys\_\allowbreak } prefixű függvényei. Ezek már a konkrét Linux
+rendszerhívásokhoz igazodó nevet és paraméterlistát kapnak, miközben a tényleges
+végrehajtást továbbra is a megfelelő \code{raw\_\allowbreak syscallN} függvényre
+bízzák. Erre mutat példát \aref{lst:sys-openat}. kódrészlet.
+
+\begin{lstlisting}[float, language=C++, caption={Az openat(2) rendszerhívás wrapper függvénye}, label={lst:sys-openat}]
+static inline __attribute__((always_inline))
+int sys_openat(int const dirfd, char const* const path, int const flags,
+               mode_t const mode) noexcept
+{
+    return raw_syscall4<int>(__NR_openat, dirfd, path, flags, mode);
+}
+\end{lstlisting}
+
+A \code{sys\_\allowbreak openat} függvény a rendszerhívás sorszámát az
+\code{\_\_NR\_\allowbreak openat} konstanson keresztül adja át, majd a négy
+argumentumot változtatás nélkül továbbítja a \code{raw\_\allowbreak syscall4}
+függvénynek. Így a könyvtár többi része már nem közvetlenül az inline assemblyvel
+dolgozik, hanem a Linux rendszerhívásokhoz hasonló, de névütközéstől mentes
+wrapper függvényeket használ.
 
 Fontos különbség a libc függvényekhez képest, hogy a nyers Linux
 rendszerhívások nem az \code{errno} változón keresztül jelzik a hibákat.
@@ -51,7 +108,7 @@ hibakódok közvetlenül a visszatérési értékből kezelhetők.
 
 \section{Seccomp szűrők létrehozása}
 
-A könyvtár a rendszerhívások korlátozására a Linux \code{seccomp}
+A könyvtár a rendszerhívások korlátozására a Linux seccomp
 mechanizmusának \code{SECCOMP\_\allowbreak SET\_\allowbreak MODE\_\allowbreak FILTER} módját használja. Ebben az
 üzemmódban a folyamat egy klasszikus BPF programot ad át a kernelnek, amely
 minden rendszerhívás előtt lefut. A BPF program a rendszerhívás sorszáma, az
@@ -88,7 +145,7 @@ rendszerhívások esetén a folyamat leállítását kéri a kerneltől. Így a 
 alapértelmezetten tiltó jellegű: csak azok a rendszerhívások hajthatók végre,
 amelyekre a program explicit engedélyező szabályt tartalmaz.
 
-\begin{lstlisting}[language=C++,caption={Seccomp BPF szabályokat létrehozó segédmakrók}]
+\begin{lstlisting}[float, language=C++,caption={Seccomp BPF szabályokat létrehozó segédmakrók}]
 #define ALLOW_SYSCALL_RANGE(min, max) \
     BPF_JUMP(BPF_JMP + BPF_JGE + BPF_K, min, 0, 2), \
     BPF_JUMP(BPF_JMP + BPF_JGT + BPF_K, max, 1, 0), \
@@ -100,6 +157,9 @@ amelyekre a program explicit engedélyező szabályt tartalmaz.
 
 #define END_KILL_PROCESS() \
     BPF_STMT(BPF_RET + BPF_K, SECCOMP_RET_KILL_PROCESS)
+
+#define END_KILL_THREAD() \
+    BPF_STMT(BPF_RET + BPF_K, SECCOMP_RET_KILL_THREAD)
 \end{lstlisting}
 
 Az \code{ALLOW\_\allowbreak SYSCALL} makró az aktuális rendszerhívás számát hasonlítja össze
@@ -117,7 +177,67 @@ vizsgálja, hogy a rendszerhívásszám nem nagyobb-e a felső határnál. Amenn
 mindkét feltétel igaz, a szűrő engedélyezi a rendszerhívást. A két
 összehasonlítás együtt tehát a $\mathit{min} \leq \mathit{nr} \leq \mathit{max}$
 feltételt valósítja meg,
-ahol \code{nr} az aktuális rendszerhívás száma.
+ahol \emph{nr} az aktuális rendszerhívás száma.
+
+A makrók tehát továbbra is a BPF utasítások előállítására szolgálnak, de az
+implementáció nem minden szabály hozzáadásakor illeszti be őket azonnal a
+szűrőbe. Ehelyett a builder először egy rendezett rendszerhívásszám-halmazt
+épít fel, majd ebből a halmazból generálja le a végleges BPF utasítássorozatot.
+Ennek működését \aref{lst:seccomp-generate-filter}. kódrészlet mutatja be.
+
+\begin{lstlisting}[float, language=C++, caption={BPF szabályok generálása rendszerhívásszámokból}, label={lst:seccomp-generate-filter}]
+void SeccompBuilder::generate_filter_from_syscalls()
+{
+    if (m_syscalls.empty()) {
+        return;
+    }
+
+    auto it = m_syscalls.begin();
+
+    long range_start = *it;
+    long previous = *it;
+    ++it;
+
+    auto flush_range = [&] {
+        if (range_start == previous) {
+            allow_syscall(range_start);
+        } else {
+            allow_syscall_range(range_start, previous);
+        }
+    };
+
+    for (; it != m_syscalls.end(); ++it) {
+        long current = *it;
+
+        if (current == previous + 1) {
+            previous = current;
+            continue;
+        }
+
+        flush_range();
+
+        range_start = current;
+        previous = current;
+    }
+
+    flush_range();
+}
+\end{lstlisting}
+
+A \code{generate\_\allowbreak filter\_\allowbreak from\_\allowbreak syscalls} függvény a rendezett
+rendszerhívásszám-halmazt járja be. Az egymást követő értékeket egy intervallum
+részeként kezeli, és csak akkor zárja le az aktuális tartományt, amikor a
+következő rendszerhívásszám már nem közvetlen folytatása az előzőnek. Ha a
+tartomány csak egyetlen elemből áll, akkor a builder egy egyszerű
+\code{ALLOW\_\allowbreak SYSCALL} szabályt hoz létre. Ha több egymást követő
+rendszerhívásszám tartozik össze, akkor ezek egyetlen
+\code{ALLOW\_\allowbreak SYSCALL\_\allowbreak RANGE} szabályként kerülnek be a BPF
+programba.
+
+Ez a megoldás elválasztja egymástól a magasabb szintű szabálykategóriák
+kezelését és az alacsony szintű BPF utasítások előállítását. A kategóriák
+szintjén elegendő rendszerhívásszámokkal dolgozni, míg a builder feladata, hogy
+ezekből a számokból minél tömörebb seccomp szűrőt állítson elő.
 
 A lista lezárására szolgáló \code{END\_\allowbreak KILL\_\allowbreak PROCESS} makró egy olyan BPF
 utasítást illeszt a program végére, amely minden korábban nem engedélyezett
@@ -141,43 +261,266 @@ kapcsolódó rendszerhívások.
 \subsection{A seccomp builder működése}
 
 A szűrők összeállítását a \code{SeccompBuilder} osztály végzi. A builder
-belsőleg egy \code{std::vector} tárolót használ, amelybe
-egymás után kerülnek be a BPF utasítások. Az inicializálás során először a
-közös bevezető rész kerül a szűrő elejére, majd az alapértelmezett
-\code{basic} szabályok. Az \code{init\_\allowbreak no\_\allowbreak defaults} változat ezzel
-szemben csak a bevezető részt adja hozzá, és nem engedélyez automatikusan
-semmilyen kategóriát.
+belsőleg kétféle állapotot tart nyilván: egyrészt a már közvetlenül létrehozott
+BPF utasításokat, másrészt az engedélyezendő rendszerhívások számait. A BPF
+utasítások tárolására egy \code{std::\allowbreak vector} szolgál, míg a rendszerhívásszámok
+egy rendezett halmazba kerülnek. Ez utóbbi teszi lehetővé, hogy a véglegesítés
+során az egymást követő rendszerhívások automatikusan tartományszabályokká
+alakuljanak.
 
-A felhasználó az \code{allow} függvénnyel adhat hozzá további
-szabálykategóriákat. A függvény név alapján megkeresi a megfelelő
-\code{sock\_\allowbreak fprog} struktúrát, majd annak utasításait hozzáfűzi a builder
-belső szűrőlistájához. Ha a megadott kategória nem létezik, a függvény
-\code{ENOENT} hibával tér vissza. Ha a buildert már lezárták, akkor újabb
-szabály hozzáadása nem engedélyezett, ilyenkor \code{EALREADY} hibát ad
-vissza.
+Az inicializálás során először a közös bevezető rész kerül a szűrő elejére. Ez
+az architektúra ellenőrzését és a rendszerhívásszám betöltését végzi el. Az
+\code{init} változat ezután hozzáadja az alapértelmezett \code{basic}
+szabálykategóriát is, míg az \code{init\_\allowbreak no\_\allowbreak defaults} csak a
+bevezető részt hozza létre, és nem engedélyez automatikusan semmilyen
+rendszerhívás-kategóriát.
 
-A szűrő véglegesítését a \code{build\_\allowbreak static} függvény végzi. Ekkor kerül
-a szabálylista végére az alapértelmezett tiltó szabály, amely vagy a teljes
-folyamatot, vagy csak az aktuális szálat állítja le. Ezután a builder lezárt
-állapotba kerül, így a szűrő tartalma többé nem módosítható.
+A felhasználó az \code{allow} függvénnyel adhat hozzá további kategóriákat. A
+függvény a kategória rendszerhívásszámait nem közvetlenül BPF utasításként
+illeszti be, hanem a builder belső rendszerhívás-halmazába helyezi. Ha a
+kategória más kategóriákat is örököl, akkor ezek is hozzáadásra kerülnek. Így a
+kategóriák kompozíciója még a BPF program generálása előtt történik meg.
+
+A szűrő véglegesítését a \code{build\_\allowbreak static} függvény végzi. Ha a builder
+még nincs lezárva, először meghívja a
+\code{generate\_\allowbreak filter\_\allowbreak from\_\allowbreak syscalls} függvényt, amely a
+felgyűjtött rendszerhívásszámokból létrehozza a megfelelő engedélyező BPF
+szabályokat. Az egyedi rendszerhívásokhoz \code{ALLOW\_\allowbreak SYSCALL}, az
+összefüggő tartományokhoz pedig \code{ALLOW\_\allowbreak SYSCALL\_\allowbreak RANGE}
+szabály kerül a szűrőbe.
+
+Ezután kerül a szabálylista végére az alapértelmezett tiltó szabály, amely a
+beállítástól függően vagy a teljes folyamatot, vagy csak az aktuális szálat
+állítja le. A builder ekkor lezárt állapotba kerül, így a szűrő tartalma többé
+nem módosítható. A véglegesítés során az implementáció azt is ellenőrzi, hogy a
+BPF program hossza belefér-e a \code{sock\_\allowbreak fprog} struktúrában használt
+\code{unsigned short} mérettartományba; ha nem, akkor \code{E2BIG} hibát ad vissza.
 
 A véglegesített BPF program számára az implementáció külön memóriaterületet
 foglal a \code{mmap} rendszerhívással. A builder először írható és olvasható
 memóriát kér, majd ebbe átmásolja az összeállított \code{sock\_\allowbreak filter}
-elemeket. A másolás után a memóriaterületet \code{mprotect} segítségével
-csak olvashatóvá teszi. Ennek célja, hogy a már elkészült szűrőprogram ne
-módosulhasson véletlenül a további futás során.
+elemeket. A másolás után a memóriaterületet \code{mprotect} segítségével csak
+olvashatóvá teszi. Ennek célja, hogy a már elkészült szűrőprogram ne módosuljon
+véletlenül a további futás során.
 
-A létrehozott szűrőre a \code{SeccompRuleView} objektum mutat. Ez egy
-nézet jellegű objektum, amely a \code{sock\_\allowbreak fprog} struktúrát tartalmazza.
-A \code{build} függvény erre építve hoz létre birtokló
-\code{SeccompRule} objektumot.
+A létrehozott szűrőre a \code{SeccompRuleView} objektum mutat. Ez egy nézet
+jellegű objektum, amely a \code{sock\_\allowbreak fprog} struktúrát tartalmazza. A
+\code{build} függvény erre építve hoz létre birtokló \code{SeccompRule} objektumot.
 
 A kész szűrő aktiválása a \code{seccomp} rendszerhívással történik. Az
 implementáció a
 \code{SECCOMP\_\allowbreak SET\_\allowbreak MODE\_\allowbreak FILTER}
-műveletet használja, és
-a korábban létrehozott \code{sock\_\allowbreak fprog} struktúrát adja át a kernelnek.
-Siker esetén a hívás nulla értékkel tér vissza. Hiba esetén a nyers
-rendszerhívás negatív hibakódot ad vissza, amelyet a könyvtár
-\code{std::expected} formában továbbít a hívó felé.
+műveletet használja, és a korábban létrehozott \code{sock\_\allowbreak fprog}
+struktúrát adja át a kernelnek. Siker esetén a hívás nulla értékkel tér vissza.
+Hiba esetén a nyers rendszerhívás negatív hibakódot ad vissza, amelyet a
+könyvtár \code{std::\allowbreak expected} formában továbbít a hívó felé.
+
+\section{Landlock szabályrendszer létrehozása}
+
+A fájlrendszer-szintű korlátozások megvalósítására a könyvtár a Linux
+Landlock mechanizmusát használja. A Landlock egy olyan LSM-alapú sandboxolási
+megoldás, amely lehetővé teszi, hogy egy folyamat saját magára nézve
+fájlrendszer-hozzáférési szabályokat állítson be. A seccomp-pal ellentétben itt
+nem rendszerhívások engedélyezéséről vagy tiltásáról van szó, hanem arról, hogy
+a folyamat mely fájlokhoz és könyvtárakhoz milyen műveletekkel férhet hozzá.
+
+Az implementáció központi eleme a \code{LandlockRuleSet} osztály. Ez egy
+Landlock ruleset fájlleírót birtokol, amelyet RAII-elven kezel: a ruleset
+létrehozása után az objektum felelős az erőforrás életciklusáért. A ruleset
+létrehozásakor az implementáció megadja, hogy milyen fájlrendszer-hozzáférési
+típusokat kíván kezelni. Ezek közé tartozik például a fájlok olvasása és írása,
+könyvtárak olvasása, fájlok végrehajtása, új fájlok vagy könyvtárak létrehozása,
+valamint meglévő fájlok csonkítása.
+
+A könyvtár ezeket az alacsony szintű Landlock hozzáférési biteket egy
+magasabb szintű \code{LandlockAccess} felsorolástípus mögé rejti. Ezáltal a
+felhasználónak nem szükséges közvetlenül a kernel által definiált bitmaszkokkal
+dolgoznia, hanem olyan kategóriákat használhat, mint a \code{Read},
+\code{Write}, \code{Execute}, illetve ezek kombinációi, például a
+\code{ReadWrite} vagy a \code{ReadExecute}. Ez a megoldás olvashatóbbá teszi a
+szabályok megadását, miközben az implementáció továbbra is a Landlock által
+elvárt bitmaszkokat adja át a kernelnek.
+
+\begin{lstlisting}[float, language=C++, caption={Landlock hozzáférési kategóriák}, label={lst:landlock-access}]
+enum class LandlockAccess: __u64
+{
+    Write   = LANDLOCK_ACCESS_FS_WRITE_FILE
+            | LANDLOCK_ACCESS_FS_TRUNCATE
+            | LANDLOCK_ACCESS_FS_MAKE_BLOCK
+            | LANDLOCK_ACCESS_FS_MAKE_CHAR
+            | LANDLOCK_ACCESS_FS_MAKE_DIR
+            | LANDLOCK_ACCESS_FS_MAKE_FIFO
+            | LANDLOCK_ACCESS_FS_MAKE_REG
+            | LANDLOCK_ACCESS_FS_MAKE_SOCK
+            | LANDLOCK_ACCESS_FS_MAKE_SYM,
+    Read    = LANDLOCK_ACCESS_FS_READ_FILE | LANDLOCK_ACCESS_FS_READ_DIR,
+    Execute = LANDLOCK_ACCESS_FS_EXECUTE,
+
+    ReadWrite    = Read | Write,
+    ReadExecute  = Read | Execute,
+    WriteExecute = Write | Execute,
+
+    All = Read | Write | Execute,
+};
+\end{lstlisting}
+
+\Aref{lst:landlock-access}. kódrészletben látható, hogy a magasabb szintű
+hozzáférési kategóriák több Landlock jogosultsági bitből is összeállhatnak.
+Például a \code{Write} nemcsak meglévő fájlok írását jelenti, hanem olyan
+műveleteket is tartalmaz, mint a fájl csonkítása vagy új fájlrendszer-objektumok
+létrehozása. Ez azért fontos, mert a fájlrendszer írási jogosultsága a
+gyakorlatban nem egyetlen műveletet jelent, hanem több különböző kernel által
+kezelt hozzáférési típust.
+
+A ruleset inicializálásakor az implementáció a \code{LandlockAccess::\allowbreak All}
+értéknek megfelelő hozzáférési halmazt adja meg kezelt hozzáférésként. Ez azt
+jelenti, hogy a létrehozott ruleset ezekre a hozzáférési típusokra képes
+szabályokat érvényesíteni. Ezután a könyvtár néhány alapértelmezett útvonalhoz
+automatikusan szabályt ad hozzá. Ezek célja, hogy a sandboxolt folyamat számára
+megmaradjanak bizonyos alapvető működéshez szükséges rendszererőforrások,
+például a standard be- és kimenethez, véletlenszám-forrásokhoz vagy futtatható
+programokhoz kapcsolódó útvonalak.
+
+\begin{lstlisting}[float, language=C++, caption={Alapértelmezett Landlock útvonalak}, label={lst:landlock-default-paths}]
+static constexpr std::pair<char const*, LandlockAccess>
+landlock_default_paths_arr[] = {
+    {"/dev/null",    LandlockAccess::ReadWrite},
+    {"/dev/full",    LandlockAccess::ReadWrite},
+    {"/dev/zero",    LandlockAccess::ReadWrite},
+    {"/dev/stdin",   LandlockAccess::ReadWrite},
+    {"/dev/stdout",  LandlockAccess::ReadWrite},
+    {"/dev/stderr",  LandlockAccess::ReadWrite},
+    {"/dev/random",  LandlockAccess::Read},
+    {"/dev/urandom", LandlockAccess::Read},
+    {"/proc/self",   LandlockAccess::ReadWrite},
+    {"/proc",        LandlockAccess::Read},
+    {"/bin",         LandlockAccess::ReadExecute},
+    {"/usr/bin",     LandlockAccess::ReadExecute},
+};
+\end{lstlisting}
+
+\Aref{lst:landlock-default-paths}. kódrészlet az alapértelmezett útvonalak egy
+részét mutatja. Ezek az útvonalak nem általános felhasználói hozzáférést
+biztosítanak, hanem a minimális futási környezethez szükséges erőforrásokat
+teszik elérhetővé. A \code{/dev/null}, \code{/dev/stdout} és
+\code{/dev/stderr} például tipikusan a programok normál be- és kimeneti
+működéséhez szükségesek, míg a \code{/dev/urandom} olvasási jogosultsága több
+könyvtár és futtatókörnyezet számára is fontos lehet. A \code{/bin} és
+\code{/usr/bin} útvonalak olvasási és végrehajtási joggal szerepelnek, így a
+sandboxolt folyamat számára bizonyos futtatható állományok elérhetők maradnak.
+
+A konkrét Landlock szabályok hozzáadását az \code{add\_\allowbreak rule}
+függvény végzi. A függvény egy fájlleírót és egy hozzáférési maszkot kap. Először
+megvizsgálja, hogy a fájlleíró fájlra vagy könyvtárra mutat-e, majd ennek
+megfelelően szűkíti a megadott jogosultságokat. Erre azért van szükség, mert
+nem minden Landlock hozzáférési bit értelmezhető minden fájlrendszer-objektumra.
+Például a könyvtár olvasása vagy új fájl létrehozása könyvtárakhoz kapcsolódó
+művelet, míg egy normál fájl esetén csak a fájlokra értelmezhető jogosultságok
+adhatók meg.
+
+\begin{lstlisting}[float, language=C++, caption={Landlock szabály hozzáadása fájlleíró alapján}, label={lst:landlock-add-rule}]
+std::expected<void, int>
+add_rule(int fd, LandlockAccess access) noexcept
+{
+    struct stat st {};
+
+    if (fstat(fd, &st) < 0) {
+        return std::unexpected {errno};
+    }
+
+    __u64 allowed = static_cast<__u64>(access);
+
+    if (S_ISDIR(st.st_mode)) {
+        allowed &= detail::dir_allowed_access;
+    } else {
+        allowed &= detail::file_only_access;
+    }
+
+    if (allowed == 0) {
+        return std::unexpected {ENOMSG};
+    }
+
+    landlock_path_beneath_attr attr {};
+    attr.allowed_access = allowed;
+    attr.parent_fd = fd;
+
+    const int ret = detail::landlock_add_rule(
+        m_ruleset_fd,
+        LANDLOCK_RULE_PATH_BENEATH,
+        &attr,
+        0
+    );
+
+    if (ret < 0) {
+        return std::unexpected {-ret};
+    }
+
+    return {};
+}
+\end{lstlisting}
+
+\Aref{lst:landlock-add-rule}. kódrészletben látható, hogy a függvény először a
+\code{fstat} segítségével lekérdezi az objektum típusát. Ezután a megadott
+hozzáférési maszkot metszi a fájlokra, illetve könyvtárakra értelmezett
+jogosultságok halmazával. Ha a metszet üres, akkor a szabály nem lenne
+értelmezhető az adott objektumra, ezért a függvény hibával tér vissza.
+
+A Landlock szabály tényleges hozzáadásához az implementáció egy
+\code{landlock\_\allowbreak path\_\allowbreak beneath\_\allowbreak attr} struktúrát tölt ki.
+Ebben szerepel az engedélyezett hozzáférések bitmaszkja, valamint az a
+fájlleíró, amelyhez képest a szabály érvényes. A
+\code{LANDLOCK\_\allowbreak RULE\_\allowbreak PATH\_\allowbreak BENEATH} szabálytípus azt jelenti,
+hogy a megadott jogosultságok az adott útvonalra, illetve könyvtár esetén az
+alatta található fájlrendszer-részre vonatkoznak.
+
+A könyvtár kényelmi függvényt is biztosít útvonal alapján történő szabályfelvételre.
+Ebben az esetben a függvény először \code{openat} segítségével megnyitja az
+útvonalat \code{O\_\allowbreak PATH} módban, majd a kapott fájlleírót adja tovább a
+fájlleíró-alapú \code{add\_\allowbreak rule} függvénynek. Az \code{O\_\allowbreak PATH}
+használata azért megfelelő, mert a szabály hozzáadásához nem a fájl tartalmának
+megnyitására van szükség, hanem egy olyan fájlleíróra, amely az adott
+fájlrendszer-objektumot azonosítja.
+
+\begin{lstlisting}[float, language=C++, caption={Landlock szabály hozzáadása útvonal alapján}, label={lst:landlock-add-rule-path}]
+std::expected<void, int>
+add_rule(char const* const path, LandlockAccess access) noexcept
+{
+    auto const fd = TRY_EXPECTED(
+        detail::OwnedFd::openat(AT_FDCWD, path, O_PATH | O_CLOEXEC, 0)
+    );
+
+    return add_rule(fd, access);
+}
+\end{lstlisting}
+
+A ruleset létrehozása után a korlátozás még nem aktív. A szabályrendszert külön
+alkalmazni kell az aktuális folyamatra. Ezt az \code{apply} függvény végzi, amely
+a \code{landlock\_\allowbreak restrict\_\allowbreak self} rendszerhívást hívja meg a korábban
+létrehozott ruleset fájlleíróval.
+
+\begin{lstlisting}[float, language=C++, caption={Landlock szabályrendszer alkalmazása}, label={lst:landlock-apply}]
+std::expected<void, int> apply() noexcept
+{
+    int const ret = detail::landlock_restrict_self(m_ruleset_fd, 0);
+
+    if (ret != 0) {
+        return std::unexpected {-ret};
+    }
+
+    return {};
+}
+\end{lstlisting}
+
+\Aref{lst:landlock-apply}. kódrészletben látható, hogy a szabályrendszer
+aktiválása külön lépésként történik. Sikeres hívás után a folyamatra már
+érvényesek a korábban hozzáadott Landlock szabályok. A seccomp szűrőkhöz
+hasonlóan a hibakezelés itt is \code{std::\allowbreak expected} segítségével történik: siker
+esetén üres eredmény, hiba esetén pedig a negatív rendszerhívási visszatérési
+értékből képzett hibakód kerül visszaadásra.
+
+A Landlock modul ezzel a kialakítással a kernel alacsony szintű interfészét egy
+egyszerűbb, objektumorientáltabb API mögé rejti. A felhasználó útvonalakhoz és
+magasabb szintű hozzáférési kategóriákhoz rendelhet szabályokat, míg az
+implementáció gondoskodik a megfelelő fájlleírók megnyitásáról, a jogosultsági
+maszkok szűkítéséről, a Landlock ruleset kezeléséről és a korlátozás
+alkalmazásáról.

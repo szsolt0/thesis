@@ -21,6 +21,9 @@
 % cleveref csomag és beállításai -- az egyetlen, amit a hyperref után kell betölteni!
 \usepackage{styles/refs}
 \usepackage{xurl}
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{enumitem}
 % overfull \hbox ellen
 \usepackage[
   protrusion=true,
@@ -29,6 +32,12 @@
   stretch=20,
   shrink=20
 ]{microtype}
+
+\setlist[description]{
+  font=\normalfont\bfseries,
+  leftmargin=0pt,
+  style=nextline
+}
 
 \lstset{
   basicstyle=\ttfamily\small,

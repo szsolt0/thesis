@@ -82,3 +82,135 @@ Test project [REDACTED]
 \end{verbatim}
 
 A sikeresen lefutó tesztek azt mutatják, hogy a könyvtár alapvető biztonsági funkciói működnek: a Landlock szabályok képesek korlátozni a fájlrendszer-hozzáférést, a seccomp szabályok képesek tiltani bizonyos rendszerhívásokat, a builder interfész pedig megfelelően állítja össze és alkalmazza a szabályokat.
+
+\section{Demonstrációs példaprogramok}
+
+A könyvtár gyakorlati használatának szemléltetésére a projekt az
+\code{examples/} könyvtárban több kisebb példaprogramot is tartalmaz. Ezek közül
+a dolgozatban a \code{cat} és a \code{http\_\allowbreak server} példaprogramok
+kerülnek bemutatásra. A \code{landlock\_\allowbreak simple} és
+\code{seccomp\_\allowbreak simple} nevű programok korábbi, egyszerűbb
+demonstrációk, ezért ezek részletes ismertetése nem része a dolgozatnak.
+
+A példaprogramok célja annak bemutatása, hogy a könyvtár segítségével egy
+hagyományos program hogyan helyezhető korlátozott futási környezetbe. Mindkét
+példa a seccomp és a Landlock mechanizmusokat együtt használja: a seccomp a
+folyamat által végrehajtható rendszerhívásokat korlátozza, míg a Landlock a
+fájlrendszer-hozzáférést szűkíti le meghatározott útvonalakra.
+
+\subsection{A \code{cat} példaprogram}
+
+A \code{cat} példaprogram a Unix-szerű rendszereken megszokott \code{cat}
+segédprogram egyszerűsített változata. A parancssori argumentumként megadott
+fájlokat sorban megnyitja, majd azok tartalmát a standard kimenetre írja. A
+példa célja annak szemléltetése, hogy egy alapvetően egyszerű fájlolvasó program
+hogyan korlátozható úgy, hogy csak az előre megadott fájlokat érhesse el.
+
+A program induláskor először beállítja a \code{no\_\allowbreak new\_\allowbreak privs}
+attribútumot, amely szükséges ahhoz, hogy a folyamat jogosultságnövelés nélkül
+alkalmazhasson seccomp és Landlock korlátozásokat. Ezután létrehoz egy seccomp
+szűrőt az alapértelmezett szabályokkal, majd hozzáadja az \code{io} és a
+\code{file\_\allowbreak system} kategóriákat. Ezek a kategóriák biztosítják a
+program számára a szükséges be- és kimeneti, illetve fájlrendszerhez kapcsolódó
+rendszerhívásokat. A seccomp szűrő véglegesítése után a program alkalmazza azt
+az aktuális folyamatra.
+
+A fájlrendszer-hozzáférés korlátozását a Landlock modul végzi. A program
+létrehoz egy Landlock rulesetet, majd minden parancssori argumentumként kapott
+fájlhoz olvasási jogosultságot ad hozzá. A Landlock szabályrendszer aktiválása
+után a folyamat csak ezekhez az explicit módon engedélyezett fájlokhoz férhet
+hozzá olvasásra. Ezután a program megnyitja a fájlokat, és azok tartalmát a
+standard kimenetre másolja.
+
+A példa biztonsági szempontból azt mutatja be, hogy a program működéséhez
+szükséges jogosultságok szűken meghatározhatók. Bár a program fájlokat olvas, a
+Landlock miatt nem kap általános olvasási jogosultságot a teljes fájlrendszerre:
+csak azok a fájlok érhetők el, amelyeket a felhasználó argumentumként megadott.
+Ezzel párhuzamosan a seccomp szűrő megakadályozza, hogy a folyamat a
+megengedett kategóriákon kívüli rendszerhívásokat használjon.
+
+\begin{lstlisting}[float, language=C++, caption={A \code{cat} példaprogram sandbox beállítása}, label={lst:example-cat-sandbox}]
+unwrap_or_die(mylib::set_no_new_privs());
+
+auto seccomp = unwrap_or_die(mylib::SeccompBuilder::init());
+
+unwrap_or_die(seccomp.allow("io"));
+unwrap_or_die(seccomp.allow("file_system"));
+unwrap_or_die(unwrap_or_die(seccomp.build()).view().apply());
+
+auto landlock = unwrap_or_die(mylib::LandlockRuleSet::init());
+
+for (int i = 1; i < argc; ++i) {
+    unwrap_or_die(landlock.add_rule(argv[i], mylib::LandlockAccess::Read));
+}
+
+unwrap_or_die(landlock.apply());
+\end{lstlisting}
+
+\Aref{lst:example-cat-sandbox}. kódrészlet a \code{cat} példaprogram
+sandboxolási lépéseit emeli ki. A program először a seccomp szűrőt állítja be,
+majd a Landlock szabályokat hozza létre a parancssori argumentumok alapján. A
+tényleges fájlolvasás csak ezek után történik meg, vagyis már a korlátozott
+környezetben fut.
+
+\subsection{A \code{http\_\allowbreak server} példaprogram}
+
+A \code{http\_\allowbreak server} példaprogram egy egyszerű HTTP/1.1 szervert
+valósít meg. A példa célja nem egy teljes értékű webszerver elkészítése, hanem
+annak bemutatása, hogy egy hálózati kiszolgálóprogram működése hogyan
+korlátozható a könyvtár segítségével. A program statikus fájlokat szolgál ki,
+de a fájlrendszer-hozzáférése a Landlock szabályok miatt csak a \code{www/}
+könyvtárra korlátozódik.
+
+A szerver működéséhez a \code{basic} alapértelmezett szabályokon kívül több
+seccomp kategóriára is szükség van. A \code{file\_\allowbreak system} kategória a
+kiszolgálandó fájlok megnyitásához és olvasásához szükséges rendszerhívásokat
+engedi meg, az \code{io} kategória az általános be- és kimeneti műveleteket,
+míg a \code{network\_\allowbreak io} kategória a hálózati kommunikációhoz
+kapcsolódó rendszerhívásokat biztosítja. A seccomp szűrő ezekre a kategóriákra
+szűkíti a folyamat rendszerhívásait.
+
+A Landlock szabályrendszer ezzel párhuzamosan a kiszolgálható fájlok körét
+korlátozza. A program a \code{www/} könyvtárhoz olvasási jogosultságot rendel,
+majd aktiválja a Landlock szabályokat. Ennek eredményeként a szerver csak ebből
+a könyvtárból olvashat fájlokat. Ha egy kérés a megengedett könyvtáron kívüli
+útvonalat próbálna elérni, a fájlrendszer-hozzáférés a Landlock szabályok miatt
+meghiúsul.
+
+A példa gyakorlati jelentősége abban áll, hogy a webszerverek tipikusan
+hálózati bemenet alapján választanak ki fájlokat a fájlrendszerből. Egy
+hibásan kezelt útvonal vagy rosszul validált kérés esetén különösen fontos,
+hogy a folyamat ne férhessen hozzá tetszőleges fájlokhoz. Ebben a példában a
+Landlock a fájlrendszer oldaláról, a seccomp pedig a rendszerhívások oldaláról
+korlátozza a program mozgásterét.
+
+\begin{lstlisting}[float, language=C++, caption={A \code{http\_\allowbreak server} példaprogram korlátozásainak vázlata}, label={lst:example-http-server-sandbox}]
+unwrap_or_die(mylib::set_no_new_privs());
+
+auto seccomp = unwrap_or_die(mylib::SeccompBuilder::init());
+
+unwrap_or_die(seccomp.allow("file_system"));
+unwrap_or_die(seccomp.allow("io"));
+unwrap_or_die(seccomp.allow("network_io"));
+unwrap_or_die(unwrap_or_die(seccomp.build()).view().apply());
+
+auto landlock = unwrap_or_die(mylib::LandlockRuleSet::init());
+
+unwrap_or_die(landlock.add_rule("www", mylib::LandlockAccess::Read));
+unwrap_or_die(landlock.apply());
+\end{lstlisting}
+
+\Aref{lst:example-http-server-sandbox}. kódrészlet a HTTP szerver példaprogram
+lényegi korlátozásait foglalja össze. A seccomp szabályok a szükséges
+rendszerhívás-kategóriákat engedélyezik, míg a Landlock szabály a
+fájlrendszer-hozzáférést a \code{www/} könyvtárra korlátozza. Így a szerver a
+hálózati működéséhez szükséges rendszerhívásokat használhatja, de a
+kiszolgálható fájlok köre továbbra is szűk marad.
+
+A két példaprogram együtt azt szemlélteti, hogy a seccomp és a Landlock
+egymást kiegészítő mechanizmusok. A seccomp a folyamat által használható
+rendszerhívások körét korlátozza, míg a Landlock az engedélyezett
+fájlrendszer-hozzáféréseket határozza meg. A könyvtár célja, hogy ezek a
+korlátozások ne különálló, alacsony szintű kernel-interfészekként jelenjenek
+meg a felhasználó számára, hanem egy egységesebb, C++-os API-n keresztül legyenek
+alkalmazhatók.
