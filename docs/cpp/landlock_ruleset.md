@@ -1,53 +1,102 @@
-# `LandlockRuleSet` Class
+# `LandlockRuleSet`
 
-## Contructor
+## Overview
+
+`LandlockRuleSet` builds and applies Landlock filesystem access rules for the
+current process.
+
+It represents an allow-list of filesystem paths and permissions. Rules are added
+before the ruleset is applied:
 
 ```cpp
-[[nodiscard]] static std::expected<LandlockRuleSet, int> init() noexcept
+landlock.add_rule("/etc/passwd", LandlockAccess::Read);
+landlock.add_rule("output", LandlockAccess::ReadWrite);
 ```
 
-### Description
+After `apply()` succeeds, filesystem access is restricted to the paths and
+permissions explicitly allowed by the ruleset. The restriction applies to the
+current process and is inherited by child processes.
 
-Constructs a new `LandlockRuleSet` instance. Returns a `std::expected` that
-contains either a valid `LandlockRuleSet` or an error code
-(`int`) if initialization fails.
+`LandlockRuleSet` is an RAII wrapper around the underlying Landlock ruleset file
+descriptor.
+
+## Synopsis
+
+```cpp
+class LandlockRuleSet
+{
+public:
+    [[nodiscard]] static std::expected<LandlockRuleSet, int> init() noexcept;
+
+    [[nodiscard]] std::expected<void, int>
+    add_rule(int fd, LandlockAccess access) noexcept;
+
+    [[nodiscard]] std::expected<void, int>
+    add_rule(char const* path, LandlockAccess access) noexcept;
+
+    [[nodiscard]] std::expected<void, int> apply() noexcept;
+};
+```
+
+## Initialization
+
+```cpp
+[[nodiscard]] static std::expected<LandlockRuleSet, int> init() noexcept;
+```
+
+Creates a new Landlock ruleset.
+
+On success, returns a `LandlockRuleSet` object that owns the underlying ruleset
+file descriptor. On failure, returns a positive `errno` value.
+
+The ruleset is created before any filesystem restrictions are applied. Paths are
+made accessible with `add_rule()`, and the actual restriction only takes effect
+after `apply()` succeeds.
 
 ### Requirements
 
-At least one available file descriptor is needed for Landlock operations.
-
-### Safety
-
-MT-Safe | AS-Safe
+- Landlock must be supported by the running kernel.
+- The process must be able to create a Landlock ruleset.
+- At least one file descriptor must be available.
 
 ## `add_rule`
 
 ```cpp
-[[nodiscard]] std::expected<void, int> add_rule(int fd, LandlockAccess access) noexcept
-[[nodiscard]] std::expected<void, int> add_rule(int dirfd, char const* path, LandlockAccess access) noexcept
+[[nodiscard]] std::expected<void, int>
+add_rule(int fd, LandlockAccess access) noexcept;
+
+[[nodiscard]] std::expected<void, int>
+add_rule(char const* path, LandlockAccess access) noexcept;
 ```
 
-### Description
+Adds a filesystem access rule to the ruleset.
 
-Adds a rule to the Landlock ruleset.
+The `fd` overload adds a rule for an already-opened file descriptor. The file
+descriptor should refer to the file or directory that should be made accessible
+inside the sandbox.
 
-If using the `fd` overload, the file descriptor **MUST** be opened with the `O_PATH`
-flag.
-
-Otherwise, use the (`dirfd`, `path`) overload, which handles path-based rules.
-`AT_FDCWD` can be used for `dirfd` to specify relative paths from the current
-working directory.
+The `path` overload opens the path internally and adds a rule for the referenced
+file or directory. This is the preferred overload for most user code, because it
+does not require manually opening an `O_PATH` file descriptor.
 
 ### Parameters
 
-- `fd` – File descriptor opened with `O_PATH`.
-- `dirfd` – Base directory file descriptor for the path.
-- `path` – Path to the file or directory to apply the rule to.
-- `access` – The type of access to allow ([`LandlockAccess`](landlock_access.md)).
+- `fd` — file descriptor referring to the file or directory.
+- `path` — path to the file or directory to allow.
+- `access` — access rights to grant for the path.
 
-### Requirements
+### Returns
 
-One available file descriptor if the path-based overload is used.
+Returns an empty `std::expected` on success, or a positive `errno` value on
+failure.
+
+### Notes
+
+Rules are allow-list based. Adding a rule grants the selected access rights to
+the given file or directory once the ruleset is applied.
+
+Adding a rule does not immediately restrict the process. Restrictions only take
+effect after `apply()` succeeds.
 
 ## `apply`
 
@@ -55,45 +104,110 @@ One available file descriptor if the path-based overload is used.
 [[nodiscard]] std::expected<void, int> apply() noexcept;
 ```
 
-### Description
+Applies the Landlock ruleset to the current process.
 
-Applies the rules in the `LandlockRuleSet`. After calling this function:
+After this function succeeds:
 
-- The ruleset becomes immutable.
-- No further rules can be added.
-- Must be called exactly once for the ruleset to take effect.
+- the current process is restricted by the ruleset;
+- the restrictions are inherited by child processes;
+- no more rules can be added to this ruleset;
+- the operation cannot be undone by the process.
 
-### Safety
+### Requirements
 
-MT-Safe | AS-Safe
+`no_new_privs` must be enabled before applying a Landlock ruleset, unless the
+process has the required privileges. In typical unprivileged programs, call the
+library's `set_no_new_privs()` helper before `apply()`.
 
-## Examples
+### Returns
 
-The following example demonstrates how to use the `LandlockRuleSet` API with a
-simple error-handling strategy. The example uses a helper function fail(int)
-that terminates the program immediately on error. This style is convenient for
-example code and scripts where you want the "happy path" to remain linear and
-readable.
+Returns an empty `std::expected` on success, or a positive `errno` value on
+failure.
+
+## Example
+
+The following example demonstrates a simple sandboxed `cat`-like program. It
+allows read access only to the files passed as command-line arguments, then
+applies the Landlock ruleset before opening and printing them.
 
 ```cpp
-// Example error handler for demonstration purposes.
-// This function is marked [[noreturn]] and will terminate the program immediately.
-[[noreturn]] void fail(int err) noexcept;
+#include <mylib/landlock.h>
+#include <mylib/no_new_privs.h>
+#include <mylib/seccomp.h>
 
-int main()
+#include <cstdlib>
+#include <cstring>
+#include <expected>
+#include <fstream>
+#include <iostream>
+#include <utility>
+
+[[noreturn]] void die(int why) noexcept
 {
-	using namespace mylib;
+    std::cerr << "error: " << std::strerror(why) << '\n';
+    std::exit(1);
+}
 
-	auto rule_set = LandlockRuleSet::init().value_or(fail);
+template <class T>
+T unwrap_or_die(std::expected<T, int>&& result)
+{
+    if (!result) {
+        die(result.error());
+    }
 
-	rule_set.add_rule("/path/i/want/to/modify", LandlockAccess::Unlimited).or_else(fail);
-	rule_set.add_rule("/path/i/want/to/read", LandlockAccess::ReadOnly).or_else(fail);
-	rule_set.add_rule("/bin/possible/child", LandlockAccess::ExecuteOnly).or_else(fail);
+    return std::move(result).value();
+}
 
-	rule_set.apply().or_else(fail);
+inline void unwrap_or_die(std::expected<void, int>&& result)
+{
+    if (!result) {
+        die(result.error());
+    }
+}
+
+int main(int argc, char* argv[])
+{
+    unwrap_or_die(mylib::set_no_new_privs());
+
+    auto seccomp = unwrap_or_die(mylib::SeccompBuilder::init());
+
+    unwrap_or_die(seccomp.allow("io"));
+    unwrap_or_die(seccomp.allow("file_system"));
+
+    auto seccomp_rule = unwrap_or_die(seccomp.build());
+    unwrap_or_die(seccomp_rule.view().apply());
+
+    auto landlock = unwrap_or_die(mylib::LandlockRuleSet::init());
+
+    for (int i = 1; i < argc; ++i) {
+        unwrap_or_die(
+            landlock.add_rule(argv[i], mylib::LandlockAccess::Read)
+        );
+    }
+
+    unwrap_or_die(landlock.apply());
+
+    for (int i = 1; i < argc; ++i) {
+        std::ifstream file(argv[i], std::ios::binary);
+
+        if (!file) {
+            std::cerr << "cat: cannot open " << argv[i] << '\n';
+            return 1;
+        }
+
+        std::cout << file.rdbuf();
+    }
+
+    return 0;
 }
 ```
 
+This example applies seccomp before Landlock. Therefore, the seccomp policy must
+still allow the filesystem-related system calls needed by Landlock setup and by
+the later file-reading code.
+
 ## See Also
 
-[`LandlockAccess`](landlock_access.md)
+- [`LandlockAccess`](landlock_access.md)
+- [`SeccompBuilder`](seccomp_builder.md)
+- [`set_no_new_privs`](no_new_privs.md)
