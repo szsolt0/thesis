@@ -419,7 +419,7 @@ művelet, míg egy normál fájl esetén csak a fájlokra értelmezhető jogosul
 adhatók meg.
 
 \begin{lstlisting}[float, language=C++, caption={Landlock szabály hozzáadása fájlleíró alapján}, label={lst:landlock-add-rule}]
-std::expected<void, int>
+[[nodiscard]] std::expected<void, int>
 add_rule(int fd, LandlockAccess access) noexcept
 {
     struct stat st {};
@@ -482,14 +482,17 @@ megnyitására van szükség, hanem egy olyan fájlleíróra, amely az adott
 fájlrendszer-objektumot azonosítja.
 
 \begin{lstlisting}[float, language=C++, caption={Landlock szabály hozzáadása útvonal alapján}, label={lst:landlock-add-rule-path}]
-std::expected<void, int>
-add_rule(char const* const path, LandlockAccess access) noexcept
+[[nodiscard]] std::expected<void, int> add_rule(char const* const path, LandlockAccess access) noexcept
 {
-    auto const fd = TRY_EXPECTED(
-        detail::OwnedFd::openat(AT_FDCWD, path, O_PATH | O_CLOEXEC, 0)
-    );
+    auto const fd = detail::sys_openat(AT_FDCWD, path, O_PATH|O_CLOEXEC, 0);
+    if (fd < 0) {
+        return std::unexpected {-fd};
+    }
 
-    return add_rule(fd, access);
+    auto const err = add_rule(fd, access);
+    detail::sys_close(fd);
+
+    return err;
 }
 \end{lstlisting}
 
@@ -499,7 +502,7 @@ a \code{landlock\_\allowbreak restrict\_\allowbreak self} rendszerhívást hívj
 létrehozott ruleset fájlleíróval.
 
 \begin{lstlisting}[float, language=C++, caption={Landlock szabályrendszer alkalmazása}, label={lst:landlock-apply}]
-std::expected<void, int> apply() noexcept
+[[nodiscard]] std::expected<void, int> apply() noexcept
 {
     int const ret = detail::landlock_restrict_self(m_ruleset_fd, 0);
 
