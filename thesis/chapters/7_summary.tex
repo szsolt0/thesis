@@ -1,7 +1,67 @@
 \chapter{Összefoglalás}
 
-Hasonló szerepe van, mint a bevezetésnek.
-Itt már múltidőben lehet beszélni.
-A szerző saját meglátása szerint kell összegezni és értékelni a dolgozat fontosabb eredményeit.
-Meg lehet benne említeni, hogy mi az ami jobban, mi az ami kevésbé jobban sikerült a tervezettnél.
-El lehet benne mondani, hogy milyen további tervek, fejlesztési lehetőségek vannak még a témával kapcsolatban.
+A dolgozat célja egy olyan C++ könyvtár megtervezése és megvalósítása volt,
+amely Linux rendszereken segíti a folyamatok operációs rendszer szintű
+sandboxolását. A munka középpontjában két kernelmechanizmus állt: a seccomp,
+amely a folyamat által használható rendszerhívások szűrésére alkalmas, valamint
+a Landlock, amely fájlrendszer-hozzáférési szabályok beállítását teszi
+lehetővé.
+
+A koncepció és a tervezés során a dolgozat bemutatta a folyamat-szintű
+sandboxolás célját, valamint azokat a Linux-specifikus technológiákat, amelyekre
+a könyvtár épült. Fontos szempont volt, hogy a megoldás ne rejtse el teljesen a
+kernelmechanizmusok korlátait, de a közvetlen rendszerhívásokhoz,
+BPF-utasításokhoz és Landlock bitmaszkokhoz képest mégis kényelmesebb,
+magasabb szintű C++ felületet adjon.
+
+A megvalósítás részeként elkészült egy seccomp-alapú szabályépítő modul. Ez
+előre definiált kategóriák alapján gyűjti össze az engedélyezendő
+rendszerhívások számait, majd ezekből a véglegesítéskor BPF szűrőt állít elő.
+Az egymást követő rendszerhívásszámok tartományszabályként is bekerülhetnek a
+szűrőbe, így a létrejövő program tömörebb maradhat. A rendszerhívások
+meghívásához a könyvtár saját, alacsony szintű wrapper függvényeket használ,
+amelyek közvetlenül a Linux rendszerhívási interfészre épülnek.
+
+A Landlock modulban elkészült a \code{LandlockRuleSet} osztály, amely RAII
+jelleggel kezeli a Landlock ruleset fájlleírót. A modul magasabb szintű
+hozzáférési kategóriákat vezet be, például olvasási, írási és végrehajtási
+jogosultságokat, majd ezeket alakítja át a kernel által elvárt bitmaszkokká. A
+szabályok hozzáadásakor az implementáció figyelembe veszi, hogy a célpont fájl
+vagy könyvtár-e, és ennek megfelelően szűkíti az alkalmazott hozzáférési
+maszkot.
+
+A könyvtár működését GoogleTest alapú tesztek és demonstrációs példaprogramok
+ellenőrizték. A tesztek nemcsak az inicializálás és a szabályok létrehozásának
+sikerességét vizsgálták, hanem azt is, hogy a korlátozások ténylegesen
+érvényesülnek-e. A Landlock tesztek engedélyezett és tiltott
+fájlrendszer-hozzáféréseket vizsgáltak, míg a seccomp tesztek ellenőrizték,
+hogy az engedélyezett rendszerhívások végrehajthatók maradnak, a tiltottak
+pedig a folyamat megszakítását eredményezik. A \code{cat} és
+\code{http\_\allowbreak server} példaprogramok azt mutatták be, hogy a két
+mechanizmus egyszerűbb programhelyzetekben együtt is alkalmazható.
+
+A dolgozat ismert sérülékenységek alapján azt is bemutatta, hogy a seccomp és a
+Landlock nem a sérülékenységek kiváltó okát szüntetik meg, hanem a sikeres
+kihasználás hatását csökkenthetik. Az ImageMagick és az Apache HTTP Server
+példái alapján látható, hogy egy nem megbízható bemenetet feldolgozó folyamat
+esetén hasznos lehet a fájlrendszer-hozzáférések és a rendszerhívások előzetes
+szűkítése. Ez a többrétegű védekezés elvéhez illeszkedik: a sérülékeny
+szoftvert továbbra is javítani kell, de a folyamat jogosultságainak
+korlátozása önálló védelmi réteget adhat.
+
+A megvalósítás jelenlegi formájában elsősorban demonstrációs és kutatási célú.
+További fejlesztési lehetőség lenne több előre definiált seccomp kategória
+kidolgozása, akár részben automatikusan, például a
+\code{systemd-analyze syscall-filter} által használt rendszerhívás-csoportok
+felhasználásával. Hasznos lenne a könyvtár egyszerűbb csomagolása és
+telepíthetővé tétele is, hogy könnyebben integrálható legyen más C++
+projektekbe. Emellett egy már létező alkalmazásba történő beépítés pontosabban
+megmutathatná, hogy gyakorlati környezetben milyen szabályprofilokra és API-beli
+bővítésekre lenne szükség.
+
+Összességében a dolgozat bemutatta, hogy a seccomp és a Landlock alkalmasak
+lehetnek Linux folyamatok jogosultságainak csökkentésére, és ezek a
+mechanizmusok egy magasabb szintű C++ könyvtáron keresztül kezelhetőbb formában
+is elérhetővé tehetők. A megvalósított könyvtár nem teljes körű sandbox-rendszer,
+de szemlélteti, hogyan építhető fejlesztőbarátabb API a Linux által biztosított
+alacsony szintű biztonsági primitívekre.
