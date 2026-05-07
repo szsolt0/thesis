@@ -257,13 +257,13 @@ std::expected<void, int> SeccompBuilder::append(std::span<sock_filter> filters)
 	return {};
 }
 
-std::expected<void, int> SeccompBuilder::allow_syscall(long nr)
+std::expected<void, int> SeccompBuilder::allow_syscall(unsigned short nr)
 {
 	std::array<sock_filter, 2> filters = {{ALLOW_SYSCALL(nr)}};
 	return append(filters);
 }
 
-std::expected<void, int> SeccompBuilder::allow_syscall_range(long min, long max)
+std::expected<void, int> SeccompBuilder::allow_syscall_range(unsigned short min, unsigned short max)
 {
 	std::array<sock_filter, 3> filters = {{ALLOW_SYSCALL_RANGE(min, max)}};
 	return append(filters);

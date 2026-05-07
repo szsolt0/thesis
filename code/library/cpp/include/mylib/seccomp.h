@@ -128,8 +128,8 @@ class SeccompBuilder
 	std::expected<void, int> add_preamble();
 	std::expected<void, int> append(std::span<sock_filter> filters);
 	void generate_filter_from_syscalls();
-	std::expected<void, int> allow_syscall(long nr);
-	std::expected<void, int> allow_syscall_range(long min, long max);
+	std::expected<void, int> allow_syscall(unsigned short nr);
+	std::expected<void, int> allow_syscall_range(unsigned short min, unsigned short max);
 
 	public:
 
