@@ -199,4 +199,4 @@ int main()
 
 - [`SeccompRule`](seccomp_rule.md)
 - [`SeccompRuleView`](seccomp_rule_view.md)
-- [`set_no_new_privs`](no_new_privs.md)
+- [`set_no_new_privs`](set_no_new_privs.md)

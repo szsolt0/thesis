@@ -210,4 +210,4 @@ the later file-reading code.
 
 - [`LandlockAccess`](landlock_access.md)
 - [`SeccompBuilder`](seccomp_builder.md)
-- [`set_no_new_privs`](no_new_privs.md)
+- [`set_no_new_privs`](set_no_new_privs.md)

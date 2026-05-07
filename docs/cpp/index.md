@@ -11,7 +11,7 @@ sandboxing mechanisms from C++ code. It is built around three main components:
 2. [`SeccompBuilder`](seccomp_builder.md) — builds seccomp BPF filters from
    predefined syscall groups.
 
-3. [`set_no_new_privs`](no_new_privs.md) — enables the Linux `no_new_privs`
+3. [`set_no_new_privs`](set_no_new_privs.md) — enables the Linux `no_new_privs`
    attribute, which is required before applying unprivileged seccomp or Landlock
    restrictions.
 
@@ -40,4 +40,4 @@ unwrap_or_die(landlock.apply());
 - [`SeccompBuilder`](seccomp_builder.md)
 - [`SeccompRule`](seccomp_rule.md)
 - [`SeccompRuleView`](seccomp_rule_view.md)
-- [`set_no_new_privs`](no_new_privs.md)
+- [`set_no_new_privs`](set_no_new_privs.md)

@@ -64,4 +64,4 @@ unwrap_or_die(rule.view().apply());
 
 - [`SeccompRule`](seccomp_rule.md)
 - [`SeccompBuilder`](seccomp_builder.md)
-- [`set_no_new_privs`](no_new_privs.md)
+- [`set_no_new_privs`](set_no_new_privs.md)
