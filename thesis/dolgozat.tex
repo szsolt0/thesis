@@ -25,13 +25,9 @@
 \usepackage{tabularx}
 \usepackage{enumitem}
 % overfull \hbox ellen
-\usepackage[
-  protrusion=true,
-  expansion=true,
-  factor=1100,
-  stretch=20,
-  shrink=20
-]{microtype}
+\usepackage{microtype}
+\emergencystretch=3em
+\overfullrule=0pt
 
 \setlist[description]{
   font=\normalfont\bfseries,
