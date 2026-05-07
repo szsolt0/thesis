@@ -28,7 +28,7 @@ namespace mylib {
 
 
 // every bpf program begins with this
-#define PREAMPLE() \
+#define PREAMBLE() \
 	/* only x86_64 */ \
 	BPF_STMT(BPF_LD + BPF_W + BPF_ABS, offsetof(struct seccomp_data, arch)), \
 	BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K, AUDIT_ARCH_X86_64, 1, 0), \
@@ -269,9 +269,9 @@ std::expected<void, int> SeccompBuilder::allow_syscall_range(long min, long max)
 	return append(filters);
 }
 
-std::expected<void, int> SeccompBuilder::add_preample()
+std::expected<void, int> SeccompBuilder::add_preamble()
 {
-	std::array<sock_filter, 4> filters = {{PREAMPLE()}};
+	std::array<sock_filter, 4> filters = {{PREAMBLE()}};
 	return append(filters);
 }
 
@@ -399,7 +399,7 @@ std::expected<SeccompBuilder, int> SeccompBuilder::init() noexcept
 {
 	SeccompBuilder builder {};
 
-	TRY_EXPECTED(builder.add_preample());
+	TRY_EXPECTED(builder.add_preamble());
 	TRY_EXPECTED(builder.allow("basic"));
 
 	return builder;
@@ -409,7 +409,7 @@ std::expected<SeccompBuilder, int> SeccompBuilder::init_no_defaults() noexcept
 {
 	SeccompBuilder builder {};
 
-	TRY_EXPECTED(builder.add_preample());
+	TRY_EXPECTED(builder.add_preamble());
 	// no default rules
 	//TRY_EXPECTED(builder.allow("basic"));
 

@@ -125,7 +125,7 @@ class SeccompBuilder
 	/*__attribute__((always_inline))
 	SeccompBuilder(int const fd) noexcept : m_fd{fd} {}*/
 
-	std::expected<void, int> add_preample();
+	std::expected<void, int> add_preamble();
 	std::expected<void, int> append(std::span<sock_filter> filters);
 	void generate_filter_from_syscalls();
 	std::expected<void, int> allow_syscall(long nr);
