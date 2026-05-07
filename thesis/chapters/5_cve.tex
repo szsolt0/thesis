@@ -1,0 +1,133 @@
+\chapter{Esettanulmányok ismert sérülékenységek alapján}
+
+A következő esettanulmányok azt vizsgálják, hogy
+a seccomp és a Landlock által képviselt operációs rendszer szintű
+korlátozási elvek milyen módon csökkenthették volna egy sikeres sérülékenység
+hatását. A cél nem a sérülékenység kiváltó okának megszüntetése, hanem a
+kihasználás után elérhető fájlrendszer-hozzáférések és rendszerhívások körének
+szűkítése.
+
+\section{CVE-2022-44268: fájlolvasás képfeldolgozás közben}
+
+A CVE-2022-44268 az ImageMagick képfeldolgozó szoftvert érintő
+információszivárgási sérülékenység. A Red Hat leírása szerint a hiba lehetővé
+teszi, hogy egy támadó képfeldolgozás közben fájlokat olvasson a szerverről:
+\begin{quote}
+\foreignlanguage{english}{``This flaw allows an attacker to read arbitrary
+files from a server when parsing an image''} \cite{redhat-cve-2022-44268}
+\end{quote}
+
+A sérülékenység PNG képek feldolgozásakor jelentkezett. Az NVD leírása alapján
+az ImageMagick 7.1.0-49 verziója információszivárgásra volt sérülékeny: PNG kép
+feldolgozásakor a létrejövő képbe bekerülhetett egy tetszőleges fájl tartalma,
+amennyiben a \code{magick} folyamatnak volt jogosultsága az adott fájl
+olvasására \cite{nvd-cve-2022-44268}. Ez különösen olyan környezetben jelent
+kockázatot, ahol a szerver nem megbízható forrásból származó képeket dolgoz fel,
+például feltöltött képek átméretezése vagy konvertálása során.
+
+A hiba működésének lényege, hogy a támadó által készített bemeneti kép
+feldolgozása során a sérülékeny program olyan fájl megnyitására vehető rá,
+amelyet a normál alkalmazáslogika nem kívánt volna feldolgozni. A sikeres
+kihasználás hatását ezért jelentősen befolyásolja, hogy maga a képfeldolgozó
+folyamat milyen fájlrendszer-hozzáférésekkel rendelkezik.
+
+Egy Landlockhoz hasonló fájlrendszer-szintű sandbox ebben az esetben
+kárcsökkentő védelmi rétegként működhetne. A képfeldolgozó folyamatot még a nem
+megbízható bemenet feldolgozása előtt olyan környezetben lehetne elindítani,
+ahol csak az előre meghatározott bemeneti, kimeneti és ideiglenes
+munkakönyvtárakhoz fér hozzá. Ebben a modellben a Landlock szabályok nem a
+bemeneti kép által hivatkozott útvonalakból származnak, hanem a
+futtatókörnyezet konfigurációjából. Így ha a sérülékenység hatására a program
+megpróbálna például rendszerfájlokat megnyitni, a kernel a Landlock szabályok
+alapján megtagadná a hozzáférést.
+
+A seccomp ebben az esetben kiegészítő védelmi rétegként jelenhet meg. Egy
+képfeldolgozó worker működéséhez általában nincs szükség például új folyamatok
+indítására vagy hálózati kommunikációra. Egy megfelelő seccomp szűrő ezért
+tilthatja azokat a rendszerhívásokat, amelyek nem szükségesek a képfeldolgozás
+normál működéséhez. Ez nem akadályozza meg magát a CVE-2022-44268 jellegű
+alkalmazáshibát, de csökkentheti a sikeres kihasználás után végrehajtható
+további műveletek körét.
+
+\section{CVE-2021-41773: path traversal webszerver környezetben}
+
+A CVE-2021-41773 az Apache HTTP Server 2.4.49 verzióját érintő
+útvonalkezelési sérülékenység. Az NVD leírása szerint a hiba az Apache HTTP
+Server 2.4.49 útvonal-normalizálási változtatásához kapcsolódott, és lehetővé
+tette, hogy a támadó path traversal támadással URL-eket képezzen le a várt
+dokumentumgyökéren kívüli fájlokra \cite{nvd-cve-2021-41773}. Az Apache saját
+biztonsági tájékoztatója szintén az Apache HTTP Server 2.4 sérülékenységei
+között tartja nyilván a hibát \cite{apache-httpd-vulnerabilities-24}.
+
+A sérülékenység lényege, hogy a webszerver hibásan kezelhetett bizonyos
+útvonalkomponenseket, ezért egy speciálisan összeállított kérés a kiszolgálásra
+szánt könyvtáron kívüli fájlhoz vezethetett. Az NVD leírása alapján a kérés
+akkor lehetett sikeres, ha a dokumentumgyökéren kívüli fájlokat más
+konfigurációs szabály, például a szokásos ``require
+all denied'' beállítás nem védte. Bizonyos konfigurációkban, CGI szkriptek
+engedélyezése esetén a hiba akár távoli kódfuttatáshoz is vezethetett
+\cite{nvd-cve-2021-41773}.
+
+Ez a sérülékenység jól mutatja, hogy egy webszerver esetén az alkalmazásszintű
+útvonalellenőrzés hibája milyen közvetlen fájlrendszer-hozzáférési problémához
+vezethet. Egy statikus fájlokat kiszolgáló folyamatnak normál esetben nincs
+szüksége a teljes fájlrendszer olvasására. A működéséhez tipikusan elegendő,
+ha hozzáfér a dokumentumgyökérhez, például egy \code{/var/www} alatti
+könyvtárhoz, valamint esetleg néhány előre meghatározott konfigurációs vagy
+ideiglenes könyvtárhoz.
+
+A Landlock ebben az esetben nem az útvonal-normalizálási hibát javítaná ki,
+hanem a hibás útvonalkezelés következményét korlátozhatná. Ha a webszerver
+folyamat már a kérések feldolgozása előtt Landlock szabályokkal csak a
+dokumentumgyökér olvasására lenne jogosult, akkor egy path traversal jellegű
+hiba esetén a dokumentumgyökéren kívüli fájlok megnyitását a kernel
+megtagadhatná. Az alkalmazás hibás logikája eljuthatna ugyan a fájlmegnyitási
+műveletig, de az operációs rendszer szintű hozzáférés-ellenőrzés miatt például
+a \code{/etc}, \code{/home}, vagy más nem engedélyezett könyvtárak tartalma nem
+válna olvashatóvá a folyamat számára.
+
+Ez a megközelítés különösen jól kapcsolódik a dolgozatban bemutatott
+\code{http\_\allowbreak server} demonstrációs példaprogramhoz. A példaprogramban
+a Landlock szabályrendszer a kiszolgálható fájlokat a \code{www/} könyvtárra
+korlátozza. Ennek célja éppen az, hogy akkor is legyen egy kernel-szintű
+védelmi réteg, ha a szerver alkalmazásszintű útvonalkezelése hibás lenne. A
+kiszolgáló így nem a teljes fájlrendszerre kap olvasási jogot, hanem csak arra
+a részre, amelyre a normál működéséhez ténylegesen szüksége van.
+
+A seccomp ebben a példában kiegészítő szerepet tölthet be. Egy egyszerű
+statikus webszervernek szüksége van hálózati kommunikációra, alapvető be- és
+kimeneti műveletekre, valamint a kiszolgált fájlok megnyitására és olvasására.
+Ugyanakkor nem feltétlenül szükséges számára például új folyamatok indítása,
+tetszőleges programok végrehajtása vagy olyan rendszerhívások használata,
+amelyek nem kapcsolódnak közvetlenül a fájlkiszolgáláshoz. Egy megfelelően
+összeállított seccomp szűrő ezért tovább csökkentheti a támadó által
+kihasználható műveletek körét.
+
+\section{Az esettanulmányok tanulságai}
+
+A bemutatott két sérülékenység közös jellemzője, hogy a sikeres kihasználás
+hatása erősen függött a sérülékeny folyamat jogosultságaitól. Az ImageMagick
+esetében az volt lényeges, hogy a képfeldolgozó folyamat milyen fájlokat tudott
+olvasni. Az Apache HTTP Server esetében pedig az, hogy a webszerver folyamat
+hozzáférhetett-e a dokumentumgyökéren kívüli útvonalakhoz.
+
+Mindkét esetben jól látható, hogy az alkalmazásszintű hibák mögé érdemes
+operációs rendszer szintű korlátozásokat is helyezni. A Landlock a
+fájlrendszer-hozzáférések körét szűkítheti le előre meghatározott útvonalakra,
+míg a seccomp a használható rendszerhívásokat korlátozhatja. Ezek a
+mechanizmusok nem akadályozzák meg szükségszerűen a sérülékenység kiváltó okát,
+de csökkenthetik azt, hogy egy sikeres kihasználás után a támadó milyen
+erőforrásokat érhet el.
+
+A legfontosabb tanulság az, hogy a sandbox szabályait nem a nem megbízható
+bemenetből kell levezetni, hanem a program legitim működéséhez szükséges
+erőforrásokból. Egy képfeldolgozó komponens esetén ilyen lehet a bemeneti és
+kimeneti munkakönyvtár, egy statikus webszerver esetén pedig a
+dokumentumgyökér. Ha a folyamat már a nem megbízható bemenet feldolgozása előtt
+ilyen korlátozott környezetben fut, akkor egy alkalmazáshiba hatása kisebb
+területre szorítható.
+
+Ez a megközelítés a többrétegű védekezés elvéhez illeszkedik. A sérülékeny
+szoftvert továbbra is frissíteni kell, az alkalmazásszintű hibákat pedig
+javítani kell, de ezek mellett a folyamat jogosultságainak csökkentése
+önállóan is értékes védelmi réteg lehet.
