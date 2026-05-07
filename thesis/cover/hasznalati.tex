@@ -2,14 +2,16 @@
 
 \section*{CD Használati útmutató}
 
-A szakdolgozathoz mellékelt adathordozó tartalmazza a dolgozat PDF-változatát, a dolgozat LaTeX forráskódját, valamint a dolgozathoz kapcsolódó forráskódokat és dokumentációkat.
+A szakdolgozathoz mellékelt adathordozó tartalmazza a dolgozat PDF-változatát,
+a dolgozat \LaTeX{} forráskódját, valamint a dolgozathoz kapcsolódó
+forráskódokat és dokumentációkat.
 
 Az adathordozó főbb jegyzékei és fájljai a következők:
 
 \begin{itemize}
     \item \path{dolgozat.pdf}: a szakdolgozat végleges, PDF formátumú változata.
 
-    \item \path{thesis/}: a szakdolgozat LaTeX forrásfájljai. Ebben a jegyzékben találhatók a dolgozat fejezetei, a hivatkozásokhoz szükséges fájlok, valamint a PDF előállításához használt egyéb LaTeX állományok.
+    \item \path{thesis/}: a szakdolgozat \LaTeX{} forrásfájljai. Ebben a jegyzékben találhatók a dolgozat fejezetei, a hivatkozásokhoz szükséges fájlok, valamint a PDF előállításához használt egyéb \LaTeX{} állományok.
 
     \item \path{docs/}: a könyvtárhoz és a dolgozat témájához kapcsolódó dokumentációk. Ezek a fájlok a megvalósított megoldások, illetve a vizsgált technológiák megértését segítik.
 
@@ -22,10 +24,6 @@ Az adathordozó főbb jegyzékei és fájljai a következők:
     \end{itemize}
 
     \item \path{README.md}: a projekt rövid leírása, a szakdolgozat témája, célkitűzései, valamint a repository felépítésének áttekintése.
+
+    \item \path{LICENSE}: a mellékelt forráskódok felhasználási feltételeit tartalmazó licencfájl.
 \end{itemize}
-
-A dolgozat témája az alkalmazásfejlesztői szintű erőforrás-izoláció vizsgálata Linux rendszeren, különös tekintettel a Landlock és a seccomp mechanizmusokra. A mellékelt forráskódok egy olyan saját C++ könyvtár megvalósítását tartalmazzák, amelynek célja ezen biztonsági mechanizmusok egyszerűbb és kényelmesebb használata alkalmazásfejlesztői szinten.
-
-A programkód fordításához és futtatásához a megfelelő aljegyzékben található útmutató, illetve a projekt \path{README.md} fájlja ad további információt. A C++ implementáció CMake alapú fordítási rendszert használ, a tesztek pedig a GoogleTest keretrendszerrel készültek.
-
-Az adathordozó tartalmának megtekintéséhez elegendő a fájlokat egy tetszőleges könyvtárba másolni. A dolgozat a \path{dolgozat.pdf} fájl megnyitásával olvasható, a forráskódok pedig a \path{code/} jegyzék alatt találhatók.

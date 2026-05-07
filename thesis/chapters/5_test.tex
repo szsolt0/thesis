@@ -1,87 +1,220 @@
 \chapter{Tesztelés}
 
-A projekt tesztjei a \path{tests} jegyzékben találhatók. A teszteléshez a GoogleTest keretrendszert használtam, mert egyszerűen integrálható CMake alapú C++ projektekbe, és jól használható egységtesztek, valamint olyan speciális esetek vizsgálatára is, amikor egy folyamatnak szándékosan meg kell szakadnia. Ez utóbbi különösen fontos a seccomp tesztelésekor, mivel a tiltott rendszerhívások hatására a kernel a folyamatot megszakíthatja.
+A projekt tesztjei a \path{tests} jegyzékben találhatók. A teszteléshez a
+GoogleTest keretrendszert használtam, mivel jól integrálható CMake alapú C++
+projektekbe, és az egyszerű egységtesztek mellett olyan speciális esetek
+vizsgálatára is alkalmas, amikor egy folyamatnak szándékosan meg kell
+szakadnia.
 
-A tesztek célja annak ellenőrzése, hogy a könyvtár fő biztonsági mechanizmusai, vagyis a Landlock alapú fájlrendszer-korlátozás és a seccomp alapú rendszerhívás-szűrés helyesen működnek-e. A tesztek nemcsak azt vizsgálják, hogy az inicializáló és beállító függvények sikeresen lefutnak-e, hanem azt is, hogy a beállított szabályok ténylegesen érvényesülnek-e.
+A könyvtár tesztelésénél nem elegendő pusztán azt ellenőrizni, hogy az
+inicializáló és konfiguráló függvények sikeresen lefutnak-e. Mivel a könyvtár
+biztonsági korlátozásokat állít be, azt is vizsgálni kell, hogy ezek a
+korlátozások ténylegesen érvényesülnek-e. A Landlock esetén ez azt jelenti,
+hogy az engedélyezett fájlrendszer-hozzáférések sikeresek, míg a tiltottak
+hibával térnek vissza. Seccomp esetén pedig azt kell ellenőrizni, hogy az
+engedélyezett rendszerhívások továbbra is végrehajthatók, a tiltott
+rendszerhívások viszont a folyamat megszakítását eredményezik.
+
+Fontos sajátosság, hogy a seccomp és Landlock korlátozások alkalmazása után a
+folyamat állapota nem állítható vissza az eredeti állapotba. Emiatt az olyan
+tesztek, amelyek a korlátozás utáni viselkedést vizsgálják, külön folyamatban
+futnak. Erre a GoogleTest \code{ASSERT\_\allowbreak EXIT} és
+\code{ASSERT\_\allowbreak DEATH} makrói használhatók. Így a vizsgált folyamat
+korlátozása vagy megszakítása nem befolyásolja a teljes tesztfuttatást.
 
 \section{Landlock tesztek}
 
-A Landlock tesztek a \code{LandlockRuleSet} osztály működését ellenőrzik. A tesztek első lépésként meghívják a \code{set\_\allowbreak no\_\allowbreak new\_\allowbreak privs()} függvényt. Erre azért van szükség, mert a Landlock és a seccomp használatánál is fontos, hogy a folyamat később ne szerezhessen új jogosultságokat. Ez csökkenti annak kockázatát, hogy egy korlátozott folyamat valamilyen módon megkerülje a rá alkalmazott biztonsági szabályokat.
+A Landlock tesztek a \code{LandlockRuleSet} osztály működését vizsgálják. A
+tesztek első lépésként meghívják a
+\code{set\_\allowbreak no\_\allowbreak new\_\allowbreak privs()} függvényt, mivel a
+Landlock használatához szükséges, hogy a folyamat később ne szerezhessen új
+jogosultságokat. Ez biztosítja, hogy a korlátozott folyamat ne tudja egyszerűen
+megkerülni a rá alkalmazott szabályokat valamilyen jogosultságnövelésen
+keresztül.
 
-Az alap Landlock teszt azt vizsgálja, hogy létrehozható-e egy új szabálykészlet, hozzáadható-e egy olvasási szabály a \code{/etc} könyvtárra, majd alkalmazható-e a szabálykészlet:
+A Landlock tesztek első csoportja az API alapvető működését ellenőrzi. Ezek a
+tesztek azt vizsgálják, hogy létrehozható-e egy új szabálykészlet, hozzáadható-e
+szabály egy létező útvonalhoz, illetve megfelelően hibával tér-e vissza a
+könyvtár, ha a felhasználó nem létező útvonalra próbál szabályt felvenni.
 
-\begin{itemize}
-    \item a \code{set\_\allowbreak no\_\allowbreak new\_\allowbreak privs()} sikeresen lefut,
-    \item a \code{LandlockRuleSet::init()} sikeresen létrehoz egy szabálykészletet,
-    \item a \path{/etc} könyvtárra olvasási jogosultság adható,
-    \item a szabálykészlet alkalmazható az aktuális folyamatra.
-\end{itemize}
+Az inicializálási teszt azt ellenőrzi, hogy a
+\code{LandlockRuleSet::\allowbreak init()} sikeresen létrehoz egy új Landlock
+rulesetet. Ez a teszt azért fontos, mert a ruleset létrehozása során a könyvtár
+közvetlenül a Landlock rendszerhívásokat használja, ezért már ezen a ponton
+kiderülhet, ha a futtató kernel vagy környezet nem támogatja a szükséges
+mechanizmust.
 
-Ez a teszt főként azt ellenőrzi, hogy az alapvető Landlock inicializáció és szabályalkalmazás működőképes-e.
+Egy másik teszt azt vizsgálja, hogy egy létező útvonalhoz, például a
+\path{/etc} könyvtárhoz, hozzáadható-e olvasási jogosultság. Ez nem a teljes
+fájlrendszer-korlátozás működését bizonyítja, hanem azt, hogy a könyvtár képes
+egy érvényes Landlock szabályt felvenni a létrehozott rulesetbe. Emellett külön
+teszt ellenőrzi azt is, hogy nem létező útvonal esetén a szabály hozzáadása
+sikertelen. Ez a hibakezelés szempontjából lényeges, mert a könyvtárnak nem
+szabad érvénytelen útvonalat csendben elfogadnia szabálycélpontként.
 
-A második Landlock teszt már a jogosultságok tényleges érvényesülését is vizsgálja. A teszt létrehoz egy \path{test_folder} nevű könyvtárat, azon belül egy alkönyvtárat és fájlokat, valamint létrehoz egy külön \path{test_folder_secret} könyvtárat is. Ezután a Landlock szabályok csak a \path{/etc} könyvtár olvasását, illetve a \path{test_folder} könyvtár olvasását és írását engedélyezik.
+A Landlock tesztek második csoportja már a szabályok tényleges
+érvényesülését vizsgálja. Ezek a tesztek ideiglenes könyvtárstruktúrát hoznak
+létre, amelyben található egy engedélyezett könyvtár, annak egy alkönyvtára,
+valamint egy külön, nem engedélyezett könyvtár. A tesztek ezután aktiválják a
+Landlock szabályrendszert, majd különböző fájlrendszer-műveleteket próbálnak
+végrehajtani.
 
-A szabályok alkalmazása után a teszt közvetlen rendszerhívás-burkolókon keresztül próbál fájlokat megnyitni. A \code{/etc/passwd} olvasása sikeres kell legyen, mert a \code{/etc} könyvtárra olvasási engedélyt kapott a folyamat. A \path{test_folder/a.txt} és a \path{test_folder/sub/a.txt} fájlok írásra és olvasásra is megnyithatók, mert a \path{test_folder} könyvtárra olvasási és írási jogosultság lett beállítva. Ezzel szemben a \path{test_folder_secret/secret.txt} megnyitásának sikertelennek kell lennie, mert erre a könyvtárra nem került engedélyező szabály.
+Az olvasási tesztek azt ellenőrzik, hogy az engedélyezett könyvtáron belüli
+fájl olvasható marad-e a korlátozás aktiválása után. Külön eset vizsgálja azt
+is, hogy a könyvtárra adott Landlock szabály az alkönyvtárakra is érvényes-e.
+Ez a \code{LANDLOCK\_\allowbreak RULE\_\allowbreak PATH\_\allowbreak BENEATH}
+szabálytípus működése miatt fontos, mivel a könyvtárra adott szabály nemcsak
+magára a könyvtárra, hanem az alatta található fájlrendszer-részre is
+vonatkozik. Ezzel szemben egy külön teszt azt ellenőrzi, hogy az engedélyezett
+könyvtáron kívüli fájl olvasása sikertelen legyen.
 
-Ez a teszt tehát azt igazolja, hogy a Landlock szabályok ténylegesen korlátozzák is a fájlrendszerhez való hozzáférést.
+Az írási jogosultságokat külön tesztek vizsgálják. Az egyik teszt
+\code{ReadWrite} jogosultságot ad az engedélyezett könyvtárra, majd ellenőrzi,
+hogy egy meglévő fájl írásra megnyitható-e. Egy másik teszt csak olvasási
+jogosultságot ad ugyanarra a könyvtárra, majd megpróbálja a fájlt írásra
+megnyitni. Ebben az esetben a műveletnek hibával kell visszatérnie, mert az
+olvasási jogosultság nem tartalmaz írási hozzáférést.
+
+A fájllétrehozást szintén külön tesztek ellenőrzik. A \code{ReadWrite}
+jogosultság esetén az engedélyezett könyvtárban új fájl hozható létre, mivel a
+könyvtár \code{Write} kategóriája tartalmazza a fájlrendszer-objektumok
+létrehozásához szükséges Landlock hozzáférési biteket is. Csak olvasási
+jogosultság esetén ugyanez a művelet nem engedélyezett, ezért a tesztnek
+hibás visszatérést kell tapasztalnia.
+
+A Landlock tesztek fejlesztése közben fontos gyakorlati tapasztalat volt, hogy
+az alapértelmezett Landlock útvonalak közé nem célszerű felvenni a
+\code{/dev/\allowbreak stdin}, \code{/dev/\allowbreak stdout} és
+\code{/dev/\allowbreak stderr} útvonalakat. Ezek jellemzően a
+\code{/proc/\allowbreak self/\allowbreak fd} alatti fájlleírókra mutató
+szimbolikus hivatkozások, amelyek a futási környezettől függően terminálra,
+pipe-ra vagy átirányított fájlra is mutathatnak. Emiatt nem megbízható
+Landlock szabálycélpontok. A már megnyitott standard be- és kimeneti
+fájlleírók használatához nincs szükség külön Landlock szabályra; ezek
+használatát elsősorban az engedélyezett \code{read} és \code{write}
+rendszerhívások határozzák meg.
 
 \section{Seccomp tesztek}
 
-A seccomp tesztek két fő részből állnak. Az első rész a könyvtárban megvalósított szigorított seccomp módot vizsgálja, a második pedig a szabályépítő, vagyis a \code{SeccompBuilder} működését.
+A seccomp tesztek célja a rendszerhívás-szűrés és a
+\code{SeccompBuilder} osztály működésének ellenőrzése. A tesztek itt is két
+csoportra oszthatók. Az első csoport a builder API működését vizsgálja, vagyis
+azt, hogy a szabálykategóriák hozzáadhatók-e, a hibás kategórianevek megfelelő
+hibát adnak-e, illetve hogy a builder lezárása után már nem módosítható-e. A
+második csoport a létrehozott seccomp szűrők tényleges hatását ellenőrzi.
 
-A \code{SeccompBetterStrict.StrictMode} teszt azt ellenőrzi, hogy a \code{seccomp\_\allowbreak better\_\allowbreak strict()} függvény sikeresen alkalmazható-e, és az engedélyezett rendszerhívások továbbra is működnek-e. A teszt először beállítja a \code{no\_\allowbreak new\_\allowbreak privs} állapotot, majd aktiválja a seccomp szűrőt. Ezután egyszerű írási műveleteket végez a \code{write} és \code{writev} rendszerhívások segítségével. Ezeknek sikeresen kell lefutniuk, mert a szigorított mód célja egy szűk, biztonságos működéshez szükséges rendszerhívás készlet engedélyezése.
+A builder alapműködését ellenőrző tesztek közé tartozik az alapértelmezett
+inicializálás vizsgálata. Ez azt ellenőrzi, hogy a
+\code{SeccompBuilder::\allowbreak init()} sikeresen létrehoz egy builder
+objektumot, amely már tartalmazza a közös bevezető BPF programszakaszt és az
+alapértelmezett szabálykategóriákat. Külön teszt vizsgálja az
+\code{init\_\allowbreak no\_\allowbreak defaults} változatot is, amely csak a
+bevezető részt hozza létre, és nem ad hozzá automatikus szabályokat. Ez azért
+fontos, mert bizonyos tesztekben és speciális használati esetekben szükség lehet
+teljesen kézzel összeállított seccomp konfigurációra.
 
-A \code{SeccompBetterStrict.After} teszt egy \code{mmap} rendszerhívást hajt végre seccomp korlátozás nélkül. Ez kontrolltesztként szolgál: megmutatja, hogy az \code{mmap} önmagában, seccomp szűrő nélkül végrehajtható.
+A kategóriakezelést vizsgáló tesztek ellenőrzik, hogy egy létező kategória,
+például az \code{io}, sikeresen hozzáadható-e a builderhez. Ezzel szemben egy
+ismeretlen kategórianév esetén az \code{allow} függvénynek hibával kell
+visszatérnie. A teszt ilyenkor azt várja, hogy a hiba oka az
+\code{ENOENT} legyen, vagyis a megadott szabálykategória nem található. Ez
+biztosítja, hogy a könyvtár ne fogadjon el érvénytelen konfigurációt.
 
-A \code{SeccompBetterStrict.Die} teszt ezzel szemben már azt ellenőrzi, hogy a tiltott rendszerhívás valóban megszakítja-e a folyamatot. A teszt beállítja a \code{no\_\allowbreak new\_\allowbreak privs} állapotot, aktiválja a \code{seccomp\_\allowbreak better\_\allowbreak strict()} szűrőt, majd meghívja az \code{mmap} rendszerhívást. Mivel ez a hívás nincs engedélyezve a szűrőben, a folyamatnak meg kell szakadnia. Ezt a GoogleTest \code{EXPECT\_\allowbreak DEATH} makrója vizsgálja. Ez különösen fontos teszt, mert bizonyítja, hogy a seccomp szűrő nemcsak sikeresen betöltődik, hanem a tiltott műveleteket ténylegesen meg is akadályozza.
+A szűrő felépítését vizsgáló tesztek azt ellenőrzik, hogy több kategória
+hozzáadása után a builder képes-e létrehozni a végleges seccomp szabályt. Az
+újabb implementációban a kategóriák először rendszerhívásszámokat gyűjtenek egy
+belső halmazba, majd a véglegesítés során ezekből jön létre a tényleges BPF
+utasítássorozat. Emiatt a buildelés tesztelése nemcsak az objektum létrehozását
+ellenőrzi, hanem azt is, hogy a rendszerhívásszámokból előállítható-e érvényes
+seccomp szűrő.
 
-\section{SeccompBuilder tesztek}
+Külön teszt vizsgálja, hogy a builder lezárása után már nem módosítható. A
+\code{build()} meghívása után a builder véglegesített állapotba kerül, ezért egy
+újabb \code{allow} hívásnak hibát kell adnia. Ebben az esetben a várt hibakód az
+\code{EALREADY}. Ez a viselkedés azért fontos, mert a már elkészült szűrő
+tartalma nem változhat meg váratlanul a véglegesítés után.
 
-A \code{SeccompBuilder} tesztek a dinamikusan összeállítható seccomp szabályok működését ellenőrzik. A \code{SeccompBuilder.Build} teszt először létrehoz egy builder objektumot a \code{SeccompBuilder::init()} függvénnyel. Ezután hozzáad egy létező szabálycsoportot, az \code{io} nevű szabályt. Ennek sikeresnek kell lennie. A teszt ezután megpróbál hozzáadni egy nem létező szabályt is. Ennek sikertelennek kell lennie, mert a buildernek fel kell ismernie az érvénytelen szabályneveket.
+A seccomp szűrő tényleges alkalmazását külön tesztek ellenőrzik. Ezekben a
+tesztekben először beállításra kerül a
+\code{no\_\allowbreak new\_\allowbreak privs} állapot, majd a builder létrehozza
+és alkalmazza a seccomp szűrőt. Egy alapvető teszt azt vizsgálja, hogy az
+\code{io} kategóriát tartalmazó szűrő sikeresen betölthető-e az aktuális
+folyamatra. Ez azt mutatja meg, hogy a builder által előállított BPF programot a
+kernel elfogadja és alkalmazza.
 
-A teszt végül meghívja a \code{build()} függvényt, amely a hozzáadott szabályokból létrehozza a végleges seccomp szabályt. A teszt akkor sikeres, ha a szabály létrejön, és a hibás szabálynév nem kerül elfogadásra.
+A viselkedési tesztek külön folyamatban futnak, mert a tiltott rendszerhívások
+a seccomp szabályok miatt a folyamat megszakítását okozhatják. Az egyik teszt
+szándékosan olyan szűrőt állít be, amely nem engedélyezi a fájlrendszerhez
+kapcsolódó rendszerhívásokat, majd megpróbál fájlt megnyitni. Mivel a
+\code{file\_\allowbreak system} kategória nincs engedélyezve, a rendszerhívásnak
+tiltottnak kell lennie, és a folyamatnak meg kell szakadnia. Ezt a GoogleTest
+death test mechanizmusa ellenőrzi.
 
-A \code{SeccompBuilder.Apply} teszt hasonló felépítésű, de a létrehozott szabályt ténylegesen alkalmazza is. A builder inicializálása és az \code{io} szabály hozzáadása után a teszt ismét ellenőrzi, hogy egy nem létező szabály hozzáadása hibát eredményez. Ezután létrejön a végleges szabály, majd a \code{set\_\allowbreak no\_\allowbreak new\_\allowbreak privs()} meghívása után a szabály alkalmazásra kerül az aktuális folyamatra.
+Az ellenkező irányt is külön tesztek vizsgálják. Az egyik teszt azt ellenőrzi,
+hogy az \code{io} kategória engedélyezése után a \code{write} rendszerhívás
+végrehajtható marad. Egy másik teszt a
+\code{file\_\allowbreak system} kategória engedélyezése után fájlmegnyitást
+végez. Ezek a tesztek azt igazolják, hogy a seccomp szűrő nem tilt túl sokat:
+az explicit módon engedélyezett műveleteknek továbbra is működniük kell.
 
-Ez a teszt azt igazolja, hogy a \code{SeccompBuilder} által létrehozott szabály ténylegesen betölthető és alkalmazható is.
+\section{A tesztek futtatása}
 
-\section{A tesztek értékelése}
-
-A tesztek lefedik a könyvtár legfontosabb működési részeit. A Landlock tesztek ellenőrzik a fájlrendszer-hozzáférések szabályozását, beleértve az engedélyezett és tiltott elérési utak viselkedését is. A seccomp tesztek ellenőrzik az engedélyezett rendszerhívások működését, valamint azt is, hogy egy tiltott rendszerhívás valóban a folyamat megszakítását eredményezi. A \code{SeccompBuilder} tesztek pedig azt vizsgálják, hogy a magasabb szintű szabályépítő interfész helyesen kezeli-e az érvényes és érvénytelen szabályokat.
-
-A tesztek futtatása a CMake által létrehozott build könyvtárból a következő paranccsal történik:
+A tesztek futtatása a CMake által létrehozott build könyvtárból a következő
+paranccsal történik:
 
 \begin{verbatim}
 ctest --test-dir build
 \end{verbatim}
 
-A futtatás során mind a nyolc teszt sikeresen lefutott:
+A GoogleTest lehetővé teszi egyetlen teszt vagy tesztcsoport futtatását is.
+Ez különösen hasznos a seccomp és Landlock viselkedési tesztek hibakeresésekor,
+mert ezek külön folyamatokat indíthatnak, illetve szándékosan hibás
+rendszerhívásokat is végrehajthatnak. Egy konkrét teszt futtatása például a
+következő módon történhet:
 
 \begin{verbatim}
-$ ctest --test-dir build
-Internal ctest changing into directory: [REDACTED]
-Test project [REDACTED]
-    Start 1: AdditionTest.Basic
-1/8 Test #1: AdditionTest.Basic ...............   Passed    0.00 sec
-    Start 2: SeccompBetterStrict.StrictMode
-2/8 Test #2: SeccompBetterStrict.StrictMode ...   Passed    0.00 sec
-    Start 3: SeccompBetterStrict.After
-3/8 Test #3: SeccompBetterStrict.After ........   Passed    0.00 sec
-    Start 4: SeccompBetterStrict.Die
-4/8 Test #4: SeccompBetterStrict.Die ..........   Passed    0.10 sec
-    Start 5: SeccompBuilder.Build
-5/8 Test #5: SeccompBuilder.Build .............   Passed    0.00 sec
-    Start 6: SeccompBuilder.Apply
-6/8 Test #6: SeccompBuilder.Apply .............   Passed    0.00 sec
-    Start 7: Landlock.Basic
-7/8 Test #7: Landlock.Basic ...................   Passed    0.00 sec
-    Start 8: Landlock.Allow
-8/8 Test #8: Landlock.Allow ...................   Passed    0.00 sec
-
-100% tests passed, 0 tests failed out of 8
+./build/tests/unit_tests \
+  --gtest_filter=LandlockBehavior.DeniesReadOutsideAllowedDirectory
 \end{verbatim}
 
-A sikeresen lefutó tesztek azt mutatják, hogy a könyvtár alapvető biztonsági funkciói működnek: a Landlock szabályok képesek korlátozni a fájlrendszer-hozzáférést, a seccomp szabályok képesek tiltani bizonyos rendszerhívásokat, a builder interfész pedig megfelelően állítja össze és alkalmazza a szabályokat.
+A rendszerhívások vizsgálatához a tesztek \code{strace} segítségével is
+futtathatók. Ez különösen hasznos volt a Landlock szabályok fejlesztése során,
+mert így ellenőrizhetővé vált, hogy a könyvtár valóban a megfelelő Landlock
+rendszerhívásokat hajtja-e végre, és milyen fájlleírókat ad át a kernelnek:
+
+\begin{verbatim}
+strace -f -e trace=landlock_create_ruleset,landlock_add_rule \
+  ./build/tests/unit_tests --gtest_filter=Landlock.*
+\end{verbatim}
+
+Hasonló módon a fájlmegnyitások is vizsgálhatók, például az
+\code{openat} rendszerhívások szűrésével:
+
+\begin{verbatim}
+strace -f -e trace=openat,landlock_add_rule \
+  ./build/tests/unit_tests --gtest_filter=LandlockBehavior.*
+\end{verbatim}
+
+\section{A tesztek értékelése}
+
+A tesztek a könyvtár legfontosabb működési részeit fedik le. A Landlock tesztek
+ellenőrzik a ruleset létrehozását, a szabályok hozzáadását, valamint azt, hogy
+az engedélyezett és tiltott fájlrendszer-hozzáférések a várakozásoknak
+megfelelően viselkednek. Külön tesztek vizsgálják az olvasási, írási és
+fájllétrehozási jogosultságokat, valamint azt is, hogy a könyvtárra adott
+szabály az alkönyvtárakra is érvényes.
+
+A seccomp tesztek ellenőrzik a builder interfész működését, az érvényes és
+érvénytelen szabálykategóriák kezelését, a builder lezárásának viselkedését,
+valamint azt, hogy az engedélyezett rendszerhívások végrehajthatók, a tiltott
+rendszerhívások pedig megszakítják a folyamatot.
+
+A tesztek nem jelentenek formális biztonsági bizonyítást, de gyakorlati
+szempontból igazolják, hogy a könyvtár fő komponensei a várt módon működnek. A
+Landlock és a seccomp tesztek együtt azt mutatják, hogy a könyvtár képes a
+fájlrendszer-hozzáférések és a rendszerhívások egymást kiegészítő
+korlátozására, miközben a magasabb szintű C++ API kezelhető formában teszi
+elérhetővé ezeket az alacsony szintű kernelmechanizmusokat.
 
 \section{Demonstrációs példaprogramok}
 
@@ -98,7 +231,7 @@ példa a seccomp és a Landlock mechanizmusokat együtt használja: a seccomp a
 folyamat által végrehajtható rendszerhívásokat korlátozza, míg a Landlock a
 fájlrendszer-hozzáférést szűkíti le meghatározott útvonalakra.
 
-\subsection{A \code{cat} példaprogram}
+\subsection{A cat példaprogram}
 
 A \code{cat} példaprogram a Unix-szerű rendszereken megszokott \code{cat}
 segédprogram egyszerűsített változata. A parancssori argumentumként megadott
@@ -153,7 +286,7 @@ majd a Landlock szabályokat hozza létre a parancssori argumentumok alapján. A
 tényleges fájlolvasás csak ezek után történik meg, vagyis már a korlátozott
 környezetben fut.
 
-\subsection{A \code{http\_\allowbreak server} példaprogram}
+\subsection{A HTTP Szerver példaprogram}
 
 A \code{http\_\allowbreak server} példaprogram egy egyszerű HTTP/1.1 szervert
 valósít meg. A példa célja nem egy teljes értékű webszerver elkészítése, hanem
@@ -206,11 +339,3 @@ rendszerhívás-kategóriákat engedélyezik, míg a Landlock szabály a
 fájlrendszer-hozzáférést a \code{www/} könyvtárra korlátozza. Így a szerver a
 hálózati működéséhez szükséges rendszerhívásokat használhatja, de a
 kiszolgálható fájlok köre továbbra is szűk marad.
-
-A két példaprogram együtt azt szemlélteti, hogy a seccomp és a Landlock
-egymást kiegészítő mechanizmusok. A seccomp a folyamat által használható
-rendszerhívások körét korlátozza, míg a Landlock az engedélyezett
-fájlrendszer-hozzáféréseket határozza meg. A könyvtár célja, hogy ezek a
-korlátozások ne különálló, alacsony szintű kernel-interfészekként jelenjenek
-meg a felhasználó számára, hanem egy egységesebb, C++-os API-n keresztül legyenek
-alkalmazhatók.

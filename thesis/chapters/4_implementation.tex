@@ -109,7 +109,8 @@ hibakódok közvetlenül a visszatérési értékből kezelhetők.
 \section{Seccomp szűrők létrehozása}
 
 A könyvtár a rendszerhívások korlátozására a Linux seccomp
-mechanizmusának \code{SECCOMP\_\allowbreak SET\_\allowbreak MODE\_\allowbreak FILTER} módját használja. Ebben az
+mechanizmusának \code{SECCOMP\_\allowbreak SET\_\allowbreak MODE\_\allowbreak FILTER}
+módját használja. Ebben az
 üzemmódban a folyamat egy klasszikus BPF programot ad át a kernelnek, amely
 minden rendszerhívás előtt lefut. A BPF program a rendszerhívás sorszáma, az
 architektúra és a rendszerhívás argumentumai alapján dönt arról, hogy az adott
@@ -168,22 +169,26 @@ a paraméterként megadott értékkel. Egyezés esetén a BPF program
 végrehajtható. Ha nincs egyezés, a végrehajtás a következő BPF utasításra
 kerül, így a szűrő további szabályai is vizsgálhatók.
 
-Az \code{ALLOW\_\allowbreak SYSCALL\_\allowbreak RANGE} makró ugyanezt az elvet egy összefüggő
-rendszerhívás-tartományra terjeszti ki. Először azt ellenőrzi, hogy az aktuális
-rendszerhívásszám nagyobb vagy egyenlő-e a tartomány alsó határánál. Ha ez a
-feltétel nem teljesül, a szabály nem illeszkedik, és a végrehajtás továbblép a
-következő szabályra. Ha az alsó határ teljesül, a második összehasonlítás azt
-vizsgálja, hogy a rendszerhívásszám nem nagyobb-e a felső határnál. Amennyiben
-mindkét feltétel igaz, a szűrő engedélyezi a rendszerhívást. A két
-összehasonlítás együtt tehát a $\mathit{min} \leq \mathit{nr} \leq \mathit{max}$
-feltételt valósítja meg,
-ahol \emph{nr} az aktuális rendszerhívás száma.
+Az \code{ALLOW\_\allowbreak SYSCALL\_\allowbreak RANGE} makró ugyanezt az elvet egy
+összefüggő rendszerhívás-tartományra terjeszti ki. Először azt ellenőrzi, hogy
+az aktuális rendszerhívásszám nagyobb vagy egyenlő-e a tartomány alsó határánál.
+Ha ez a feltétel nem teljesül, a szabály nem illeszkedik, és a végrehajtás
+továbblép a következő szabályra. Ha az alsó határ teljesül, a második
+összehasonlítás azt vizsgálja, hogy a rendszerhívásszám nem nagyobb-e a felső
+határnál. Amennyiben mindkét feltétel igaz, a szűrő engedélyezi a
+rendszerhívást. A két összehasonlítás együtt tehát a
+$\mathit{min} \leq \mathit{nr} \leq \mathit{max}$ feltételt valósítja meg, ahol
+\emph{nr} az aktuális rendszerhívás száma.
 
-A makrók tehát továbbra is a BPF utasítások előállítására szolgálnak, de az
-implementáció nem minden szabály hozzáadásakor illeszti be őket azonnal a
-szűrőbe. Ehelyett a builder először egy rendezett rendszerhívásszám-halmazt
-épít fel, majd ebből a halmazból generálja le a végleges BPF utasítássorozatot.
-Ennek működését \aref{lst:seccomp-generate-filter}. kódrészlet mutatja be.
+Ezek a makrók az alacsony szintű BPF utasítások előállításához használt
+építőelemek. A builder azonban nem minden \code{allow} hívásnál illeszti be
+őket közvetlenül a szűrőbe. Ehelyett először összegyűjti az engedélyezendő
+rendszerhívások számait egy rendezett halmazba, majd a véglegesítés során ebből
+a halmazból állítja elő a BPF utasítássorozatot. Ennek előnye, hogy az egymást
+követő rendszerhívásszámok egyetlen tartományszabállyá vonhatók össze.
+
+A rendszerhívásszámokból történő szabálygenerálás működését
+\aref{lst:seccomp-generate-filter}. kódrészlet mutatja be.
 
 \begin{lstlisting}[float, language=C++, caption={BPF szabályok generálása rendszerhívásszámokból}, label={lst:seccomp-generate-filter}]
 void SeccompBuilder::generate_filter_from_syscalls()
@@ -387,9 +392,6 @@ landlock_default_paths_arr[] = {
     {"/dev/null",    LandlockAccess::ReadWrite},
     {"/dev/full",    LandlockAccess::ReadWrite},
     {"/dev/zero",    LandlockAccess::ReadWrite},
-    {"/dev/stdin",   LandlockAccess::ReadWrite},
-    {"/dev/stdout",  LandlockAccess::ReadWrite},
-    {"/dev/stderr",  LandlockAccess::ReadWrite},
     {"/dev/random",  LandlockAccess::Read},
     {"/dev/urandom", LandlockAccess::Read},
     {"/proc/self",   LandlockAccess::ReadWrite},
@@ -402,9 +404,7 @@ landlock_default_paths_arr[] = {
 \Aref{lst:landlock-default-paths}. kódrészlet az alapértelmezett útvonalak egy
 részét mutatja. Ezek az útvonalak nem általános felhasználói hozzáférést
 biztosítanak, hanem a minimális futási környezethez szükséges erőforrásokat
-teszik elérhetővé. A \code{/dev/null}, \code{/dev/stdout} és
-\code{/dev/stderr} például tipikusan a programok normál be- és kimeneti
-működéséhez szükségesek, míg a \code{/dev/urandom} olvasási jogosultsága több
+teszik elérhetővé. Például a \code{/dev/urandom} olvasási jogosultsága több
 könyvtár és futtatókörnyezet számára is fontos lehet. A \code{/bin} és
 \code{/usr/bin} útvonalak olvasási és végrehajtási joggal szerepelnek, így a
 sandboxolt folyamat számára bizonyos futtatható állományok elérhetők maradnak.
