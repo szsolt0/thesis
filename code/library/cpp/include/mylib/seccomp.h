@@ -41,7 +41,7 @@ class SeccompRuleView
 
 	public:
 
-	std::expected<void, int> apply() noexcept
+	[[nodiscard]] std::expected<void, int> apply() noexcept
 	{
 		auto const res = detail::sys_seccomp(SECCOMP_SET_MODE_FILTER, 0, &m_filter);
 
@@ -133,14 +133,14 @@ class SeccompBuilder
 
 	public:
 
-	static std::expected<SeccompBuilder, int> init() noexcept;
-	static std::expected<SeccompBuilder, int> init_no_defaults() noexcept;
+	[[nodiscard]] static std::expected<SeccompBuilder, int> init() noexcept;
+	[[nodiscard]] static std::expected<SeccompBuilder, int> init_no_defaults() noexcept;
 
-	std::expected<void, int> allow(std::string_view what) noexcept;
+	[[nodiscard]] std::expected<void, int> allow(std::string_view what) noexcept;
 
-	std::expected<SeccompRule, int> build(bool kill_entire_process = true) noexcept;
+	[[nodiscard]] std::expected<SeccompRule, int> build(bool kill_entire_process = true) noexcept;
 
-	std::expected<SeccompRuleView, int> build_static(bool kill_entire_process = true) noexcept;
+	[[nodiscard]] std::expected<SeccompRuleView, int> build_static(bool kill_entire_process = true) noexcept;
 };
 
 /*std::expected<SeccompRule, int> seccomp_create_rules_v(std::span<std::string_view> const rules) noexcept
