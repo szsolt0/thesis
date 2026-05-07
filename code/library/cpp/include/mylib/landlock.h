@@ -85,8 +85,17 @@ class LandlockRuleSet
 	std::expected<void, int> add_defaults() noexcept
 	{
 		for (auto const& [path, access] : detail::landlock_default_paths) {
-			auto const fd = TRY_EXPECTED(detail::OwnedFd::openat(AT_FDCWD, path, O_PATH|O_CLOEXEC, 0));
-			TRY_EXPECTED(add_rule(fd, access));
+			auto const fd = detail::sys_openat(AT_FDCWD, path, O_PATH|O_CLOEXEC, 0);
+			if (fd < 0) {
+				return std::unexpected {-fd};
+			}
+
+			auto const res = add_rule(fd, access);
+			detail::sys_close(fd);
+
+			if (!res) {
+				return res;
+			}
 		}
 
 		return {};
@@ -151,8 +160,15 @@ class LandlockRuleSet
 
 	[[nodiscard]] std::expected<void, int> add_rule(char const* const path, LandlockAccess access) noexcept
 	{
-		auto const fd = TRY_EXPECTED(detail::OwnedFd::openat(AT_FDCWD, path, O_PATH|O_CLOEXEC, 0));
-		return add_rule(fd, access);
+		auto const fd = detail::sys_openat(AT_FDCWD, path, O_PATH|O_CLOEXEC, 0);
+		if (fd < 0) {
+			return std::unexpected {-fd};
+		}
+
+		auto const err = add_rule(fd, access);
+		detail::sys_close(fd);
+
+		return err;
 	}
 
 	[[nodiscard]] std::expected<void, int> apply() noexcept
